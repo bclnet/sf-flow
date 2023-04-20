@@ -1,7 +1,9 @@
 import { DataType, OutputAssignment, Value } from './flowCommon';
 import { RecordFilter } from './flowOperators';
 
-export interface Resource { }
+export interface Resource {
+  build: Function;
+}
 
 //#region Choice - https://help.salesforce.com/s/articleView?id=sf.flow_ref_resources_choice.htm&type=5
 
@@ -11,6 +13,10 @@ export interface Choice extends Resource {
     dataType: DataType;
     displayField: string;
     value: Value;
+}
+
+/* eslint-disable complexity */
+export function choiceBuild(source: Choice) {
 }
 
 //#endregion
@@ -28,6 +34,10 @@ export interface DynamicChoiceSet extends Resource {
     valueField: string;
 }
 
+/* eslint-disable complexity */
+export function dynamicChoiceSetBuild(source: DynamicChoiceSet) {
+}
+
 //#endregion
 
 //#region Constant - https://help.salesforce.com/s/articleView?id=sf.flow_ref_resources_constant.htm&type=5
@@ -36,6 +46,10 @@ export interface Constant extends Resource {
     name: string;
     dataType: DataType;
     value: Value;
+}
+
+/* eslint-disable complexity */
+export function constantBuild(source: Constant) {
 }
 
 //#endregion
@@ -50,6 +64,10 @@ export interface Formula extends Resource {
     scale?: number;
 }
 
+/* eslint-disable complexity */
+export function formulaBuild(source: Formula) {
+}
+
 //#endregion
 
 //#region Stage - https://help.salesforce.com/s/articleView?id=sf.flow_ref_resources_stage.htm&type=5
@@ -61,6 +79,10 @@ export interface Stage extends Resource {
     stageOrder: number;
 }
 
+/* eslint-disable complexity */
+export function stageBuild(source: Stage) {
+}
+
 //#endregion
 
 //#region TextTemplate - https://help.salesforce.com/s/articleView?id=sf.flow_ref_resources_texttemplate.htm&type=5
@@ -69,6 +91,10 @@ export interface TextTemplate extends Resource {
     name: string;
     isViewedAsPlainText: boolean;
     text: string;
+}
+
+/* eslint-disable complexity */
+export function textTemplateBuild(source: TextTemplate) {
 }
 
 //#endregion
@@ -86,6 +112,10 @@ export interface Variable extends Resource {
     objectType: string;
     scale?: number;
     value?: Value;
+}
+
+/* eslint-disable complexity */
+export function variableBuild(source: Variable) {
 }
 
 //#endregion

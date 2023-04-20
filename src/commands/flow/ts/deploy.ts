@@ -38,7 +38,7 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
 
   public async run(): Promise<FlowTsDeployResult> {
     const { flags } = await this.parse(FlowTsDeploy);
-    if (!flags.file) {
+    if (!flags.path) {
       throw messages.createError('error.paramNotFound');
     }
 
@@ -53,5 +53,6 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
       throw messages.createError('error.unsupportedFlow');
     }
     this.spinner.stop();
+    fp.toFlow();
   }
 }

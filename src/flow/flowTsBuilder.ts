@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { Flow, flowBuildNode } from '../types/flow';
+import { Flow, flowBuild } from '../types/flow';
 
 export default class FlowTsBuilder {
   private readonly flow: Flow;
@@ -13,7 +13,7 @@ export default class FlowTsBuilder {
   public isSupported(): boolean { return true; }
 
   public toTypescript(targetPath: string): string {
-    const node = flowBuildNode(this.flow, this.flowPath);
+    const node = flowBuild(this.flow, this.flowPath);
     const sourceFile = ts.createSourceFile(targetPath, '', ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
     const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
     const result = printer.printNode(ts.EmitHint.Unspecified, node, sourceFile);
