@@ -41,3 +41,7 @@ node_modules
 .idea
 
 oclif.manifest.json
+
+# test
+files.json
+files.ts
