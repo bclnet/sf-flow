@@ -1,8 +1,11 @@
 # sf-flow
 
 https://github.com/salesforcecli/cli/wiki
+https://github.com/microsoft/TypeScript/blob/main/src/compiler/factory/nodeFactory.ts
+
 cls & bin\dev flow:json:retrieve -u sky.morey@merklecxm.com1.dev01 -p Approve_Order_Summary -o files.json
 cls & bin\dev flow:ts:retrieve -u sky.morey@merklecxm.com1.dev01 -p Approve_Order_Summary -o files.ts
+cls & bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Approve_Order_Summary -o files.ts
 
 [![NPM](https://img.shields.io/npm/v/sf-flow.svg?label=sf-flow)](https://www.npmjs.com/package/sf-flow) [![Downloads/week](https://img.shields.io/npm/dw/sf-flow.svg)](https://npmjs.org/package/sf-flow) [![License](https://img.shields.io/badge/License-BSD%203--Clause-brightgreen.svg)](https://raw.githubusercontent.com/salesforcecli/sf-flow/main/LICENSE.txt)
 

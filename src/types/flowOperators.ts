@@ -1,3 +1,6 @@
+import * as ts from 'typescript';
+const sf = ts.factory;
+const sk = ts.SyntaxKind;
 import { Value } from './flowCommon';
 
 //#region Conditions - https://help.salesforce.com/s/articleView?id=sf.flow_ref_operators_condition.htm&type=5

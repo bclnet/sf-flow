@@ -1,9 +1,6 @@
 // eslint-disable-next-line import/prefer-default-export
 export function toArray<T = any>(elements): Array<T> {
-    if (elements) {
-        return Array.isArray(elements) ? elements : [elements];
-    }
-    return [];
+    return elements ? Array.isArray(elements) ? elements : [elements] : [];
 }
 
 export function unescapeHtml(target) {
@@ -19,7 +16,7 @@ export function unescapeHtml(target) {
         '&#x60;': '`',
     };
 
-    return target.replace(/&(lt|gt|amp|quot|#x27|#x60);/g, function(match) {
+    return target.replace(/&(lt|gt|amp|quot|#x27|#x60);/g, function (match) {
         return patterns[match];
     });
 }

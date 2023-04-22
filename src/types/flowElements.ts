@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/ban-types */
+import * as ts from 'typescript';
+const sf = ts.factory;
+const sk = ts.SyntaxKind;
 import { Connector, ProcessMetadataValue, DataType, Value, InputParameter, OutputParameter, InputAssignment, OutputAssignment } from './flowCommon';
 import { ConditionLogic, Condition, RecordFilter } from './flowOperators';
 
@@ -8,6 +12,7 @@ export interface Element {
     locationY: number;
     description?: string;
     processMetadataValues?: ProcessMetadataValue[];
+    build: Function;
 }
 
 //#region ApexAction - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_apex_invocable.htm&type=5
@@ -22,12 +27,26 @@ export interface ActionCall extends Element {
     storeOutputAutomatically?: boolean;
 }
 
+export function actionCallParse(s: ts.Node): ActionCall {
+}
+
+/* eslint-disable complexity */
+export function actionCallBuild(s: ActionCall) {
+}
+
 export interface ApexPluginCall extends Element {
 }
 
-export function hasActionCall(arg: any): arg is ActionCall {
-    return !(arg.actionType === 'recordUpdate' || arg.actionType === 'recordCreate');
+export function apexPluginCallParse(s: ts.Node): ApexPluginCall {
 }
+
+/* eslint-disable complexity */
+export function apexPluginCallBuild(s: ApexPluginCall) {
+}
+
+// export function hasActionCall(arg: any): arg is ActionCall {
+//     return !(arg.actionType === 'recordUpdate' || arg.actionType === 'recordCreate');
+// }
 
 //#endregion
 
@@ -58,6 +77,13 @@ export interface Assignment extends Element {
     faultConnector?: Connector;
 }
 
+export function assignmentParse(s: ts.Node): Assignment {
+}
+
+/* eslint-disable complexity */
+export function assignmentBuild(s: Assignment) {
+}
+
 //#endregion
 
 //#region CreateRecord - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_data_create.htm&type=5
@@ -73,9 +99,16 @@ export interface RecordCreate extends Element {
     storeOutputAutomatically?: boolean;
 }
 
-export function hasRecordCreate(arg: any): arg is RecordCreate {
-    return arg.actionType === 'recordCreate';
+export function recordCreateParse(s: ts.Node): RecordCreate {
 }
+
+/* eslint-disable complexity */
+export function recordCreateBuild(s: RecordCreate) {
+}
+
+// export function hasRecordCreate(arg: any): arg is RecordCreate {
+//     return arg.actionType === 'recordCreate';
+// }
 
 //#endregion
 
@@ -95,6 +128,13 @@ export interface Decision extends Element {
     defaultConnectorLabel: string;
 }
 
+export function decisionParse(s: ts.Node): Decision {
+}
+
+/* eslint-disable complexity */
+export function decisionBuild(s: Decision) {
+}
+
 //#endregion
 
 //#region DeleteRecords - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_data_delete.htm&type=5
@@ -102,6 +142,13 @@ export interface Decision extends Element {
 export interface RecordDelete extends Element {
     connector: Connector;
     faultConnector?: Connector;
+}
+
+export function recordDeleteParse(s: ts.Node): RecordDelete {
+}
+
+/* eslint-disable complexity */
+export function recordDeleteBuild(s: Decision) {
 }
 
 //#endregion
@@ -125,6 +172,13 @@ export interface RecordLookup extends Element {
     storeOutputAutomatically?: boolean;
 }
 
+export function recordLookupParse(s: ts.Node): RecordLookup {
+}
+
+/* eslint-disable complexity */
+export function recordLookupBuild(s: RecordLookup) {
+}
+
 //#endregion
 
 //#region Loop - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_loop.htm&type=5
@@ -139,6 +193,13 @@ export interface Loop extends Element {
     noMoreValuesConnector: Connector;
 }
 
+export function loopParse(s: ts.Node): Loop {
+}
+
+/* eslint-disable complexity */
+export function loopBuild(s: Loop) {
+}
+
 //#endregion
 
 //#region RecordRollback
@@ -146,6 +207,13 @@ export interface Loop extends Element {
 export interface RecordRollback extends Element {
     connector: Connector;
     faultConnector?: Connector;
+}
+
+export function recordRollbackParse(s: ts.Node): RecordRollback {
+}
+
+/* eslint-disable complexity */
+export function recordRollbackBuild(s: RecordRollback) {
 }
 
 //#endregion
@@ -197,6 +265,13 @@ export interface Screen extends Element {
     showHeader: boolean;
 }
 
+export function screenParse(s: ts.Node): Screen {
+}
+
+/* eslint-disable complexity */
+export function screenBuild(s: Screen) {
+}
+
 //#endregion
 
 //#region Start - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_start.htm&type=5
@@ -221,23 +296,30 @@ export interface Start {
     filters: RecordFilter[];
 }
 
-export function flowBuildNode(flow: Flow, flowPath: string): ts.Node {
-    const sf = ts.factory;
-    const sk = ts.SyntaxKind;
-
-    const functionName = sf.createIdentifier('factorial');
-    const paramName = sf.createIdentifier('n');
-    const parameter = sf.createParameterDeclaration(/*decorators*/undefined, /*modifiers*/undefined, /*dotDotDotToken*/undefined, paramName);
-
-    const condition = sf.createBinaryExpression(paramName, sk.LessThanEqualsToken, sf.createNumericLiteral(1));
-    const ifBody = sf.createBlock([sf.createReturnStatement(sf.createNumericLiteral(1))], /*multiline*/true);
-
-    const decrementedArg = sf.createBinaryExpression(paramName, sk.MinusToken, sf.createNumericLiteral(1));
-    const recurse = sf.createBinaryExpression(paramName, sk.AsteriskToken, sf.createCallExpression(functionName, /*typeArgs*/undefined, [decrementedArg]));
-    const statements = [sf.createIfStatement(condition, ifBody), sf.createReturnStatement(recurse)];
-
-    const source = sf.createFunctionDeclaration(/*decorators*/undefined, /*modifiers*/[sf.createToken(sk.ExportKeyword)], /*asteriskToken*/undefined, functionName, /*typeParameters*/undefined, [parameter], /*returnType*/sf.createKeywordTypeNode(sk.NumberKeyword), sf.createBlock(statements, /*multiline*/ true));
+export function startParse(s: ts.Node): Start {
 }
+
+/* eslint-disable complexity */
+export function startBuild(s: Start) {
+}
+
+// export function flowBuildNode(flow: Flow, flowPath: string): ts.Node {
+//     const sf = ts.factory;
+//     const sk = ts.SyntaxKind;
+
+//     const functionName = sf.createIdentifier('factorial');
+//     const paramName = sf.createIdentifier('n');
+//     const parameter = sf.createParameterDeclaration(/*decorators*/undefined, /*modifiers*/undefined, /*dotDotDotToken*/undefined, paramName);
+
+//     const condition = sf.createBinaryExpression(paramName, sk.LessThanEqualsToken, sf.createNumericLiteral(1));
+//     const ifBody = sf.createBlock([sf.createReturnStatement(sf.createNumericLiteral(1))], /*multiline*/true);
+
+//     const decrementedArg = sf.createBinaryExpression(paramName, sk.MinusToken, sf.createNumericLiteral(1));
+//     const recurse = sf.createBinaryExpression(paramName, sk.AsteriskToken, sf.createCallExpression(functionName, /*typeArgs*/undefined, [decrementedArg]));
+//     const statements = [sf.createIfStatement(condition, ifBody), sf.createReturnStatement(recurse)];
+
+//     const source = sf.createFunctionDeclaration(/*decorators*/undefined, /*modifiers*/[sf.createToken(sk.ExportKeyword)], /*asteriskToken*/undefined, functionName, /*typeParameters*/undefined, [parameter], /*returnType*/sf.createKeywordTypeNode(sk.NumberKeyword), sf.createBlock(statements, /*multiline*/ true));
+// }
 
 //#endregion
 
@@ -249,6 +331,13 @@ export interface Subflow extends Element {
     flowName: string;
     inputAssignments: InputAssignment[];
     outputAssignments: OutputAssignment[];
+}
+
+export function subflowParse(s: ts.Node): Subflow {
+}
+
+/* eslint-disable complexity */
+export function subflowBuild(s: Subflow) {
 }
 
 //#endregion
@@ -266,8 +355,15 @@ export interface RecordUpdate extends Element {
     inputReference?: string;
 }
 
-export function hasRecordUpdate(arg: any): arg is RecordUpdate {
-    return arg.actionType === 'recordUpdate';
+export function recordUpdateParse(s: ts.Node): RecordUpdate {
 }
+
+/* eslint-disable complexity */
+export function recordUpdateBuild(s: RecordUpdate) {
+}
+
+// export function hasRecordUpdate(arg: any): arg is RecordUpdate {
+//     return arg.actionType === 'recordUpdate';
+// }
 
 //#endregion
