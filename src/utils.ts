@@ -21,9 +21,13 @@ export function unescapeHtml(target) {
     });
 }
 
-export function toUpperSnakeCase(camelCaseText) {
-    return camelCaseText
-        .replace(/[A-Z]/g, letter => `_${letter}`)
-        .toUpperCase()
-        .replace(/^_/, '');
+export function toPascalCase(s: string): string {
+    return s.replace(/(\w)(\w*)/g, (g0, g1, g2) => g1.toUpperCase() + g2.toLowerCase());
 }
+
+// export function toUpperSnakeCase(camelCaseText) {
+//     return camelCaseText
+//         .replace(/[A-Z]/g, letter => `_${letter}`)
+//         .toUpperCase()
+//         .replace(/^_/, '');
+// }

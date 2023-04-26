@@ -14,6 +14,7 @@ const messages = Messages.load('sf-flow', 'flow.ts.retrieve', [
     'flags.username.summary',
     'flags.path.summary',
     'flags.apiversion.summary',
+    'flags.indir.summary',
     'flags.outdir.summary',
     'flags.nospinner.summary',
     'error.paramNotFound',
@@ -32,6 +33,7 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
         username: Flags.string({ summary: messages.getMessage('flags.username.summary'), char: 'u' }),
         path: Flags.string({ summary: messages.getMessage('flags.path.summary'), char: 'p' }),
         apiversion: Flags.string({ summary: messages.getMessage('flags.apiversion.summary'), default: '56.0' }),
+        indir: Flags.string({ summary: messages.getMessage('flags.indir.summary'), char: 'i' }),
         outdir: Flags.string({ summary: messages.getMessage('flags.outdir.summary'), char: 'o' }),
         nospinner: Flags.boolean({ summary: messages.getMessage('flags.nospinner.summary') }),
     };
@@ -44,11 +46,18 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
 
         if (!flags.nospinner) this.spinner.start('Retrieving the process metadata');
 
-        // const authInfo = await AuthInfo.create({ username: flags.username });
-        // const conn = await Connection.create({ authInfo });
-        // conn.setApiVersion(flags.apiversion);
-        // const flow = await conn.metadata.read('Flow', flags.path);
-        const flow = JSON.parse(fs.readFileSync(`./files.json/${flags.path}.json`, { encoding: 'utf8', flag: 'r' })) as Flow;
+        let flow: Flow;
+        if (true) {
+            const sourcePath = `${flags.path}.json`;
+            // const indir = flags.indir ? flags.indir : '.';
+            const indir = './files.json';
+            flow = JSON.parse(fs.readFileSync(`${indir}/${sourcePath}`, { encoding: 'utf8', flag: 'r' })) as Flow;
+        } else {
+            const authInfo = await AuthInfo.create({ username: flags.username });
+            const conn = await Connection.create({ authInfo });
+            conn.setApiVersion(flags.apiversion);
+            flow = await conn.metadata.read('Flow', flags.path);
+        }
 
         if (!flow.fullName) {
             this.spinner.stop('failed.');
@@ -63,7 +72,7 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
 
         const targetPath = `${flags.path}.ts`;
         const data = fb.toTypescript(targetPath);
-        this.log(data);
+        //this.log(data);
 
         const outdir = flags.outdir ? flags.outdir : '.';
         await fs.ensureDir(outdir);

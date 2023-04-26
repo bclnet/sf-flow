@@ -12,9 +12,8 @@ export default class FlowTsBuilder {
 
     public toTypescript(targetPath: string): string {
         const node = flowBuild(this.flow);
-        const sourceFile = ts.createSourceFile(targetPath, '', ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
-        const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
-        const result = printer.printNode(ts.EmitHint.Unspecified, node, sourceFile);
+        const result = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed })
+            .printNode(ts.EmitHint.Unspecified, node, ts.createSourceFile(targetPath, '', ts.ScriptTarget.Latest, false, ts.ScriptKind.TS));
         return result;
     }
 }

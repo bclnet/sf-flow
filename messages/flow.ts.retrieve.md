@@ -13,6 +13,9 @@ The file of the flow you want displayed.
 # flags.apiversion.summary
 The file of the flow you want displayed.
 
+# flags.indir.summary
+input directory.
+
 # flags.outdir.summary
 output directory.
 

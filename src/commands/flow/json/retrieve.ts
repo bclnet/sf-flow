@@ -50,7 +50,6 @@ export default class FlowJsonRetrieve extends SfCommand<FlowJsonRetrieveResult> 
         this.spinner.stop();
 
         const targetPath = `${flags.path}.json`;
-
         const outdir = flags.outdir ? flags.outdir : '.';
         await fs.ensureDir(outdir);
         fs.writeFileSync(`${outdir}/${targetPath}`, JSON.stringify(flow, null, '  '));

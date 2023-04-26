@@ -43,7 +43,6 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
         }
 
         const targetPath = `${flags.path}.ts`;
-
         const outdir = flags.outdir ? flags.outdir : '.';
         const data = fs.readFileSync(`${outdir}/${targetPath}`, { encoding: 'utf8', flag: 'r' }).toString();
 
@@ -53,6 +52,14 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
             throw messages.createError('error.unsupportedFlow');
         }
         this.spinner.stop();
-        fp.toFlow();
+        const flow = fp.toFlow();
+
+        if (true) {
+            const checkPath = `${flags.path}.json`;
+            //const jsondir = flags.outdir ? flags.outdir : '.';
+            const checkdir = './files.check';
+            await fs.ensureDir(checkdir);
+            fs.writeFileSync(`${checkdir}/${checkPath}`, JSON.stringify(flow, null, '  '));
+        }
     }
 }
