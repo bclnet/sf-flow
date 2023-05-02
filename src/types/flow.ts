@@ -8,7 +8,7 @@ import {
     buildLeadingComment,
     Context,
     Connector,
-    ProcessMetadataValue, // processMetadataValueParse, processMetadataValueBuild,
+    ProcessMetadataValue,
     Step, stepParse, stepBuild,
     Wait, waitParse, waitBuild
 } from './flowCommon';
@@ -146,14 +146,12 @@ export function flowParse(flow: Flow, s: ts.Node): void {
                         : (expr.right as ts.StringLiteral).text;
                     const argIdent = `${ident.escapedText as string}:${argName}`;
                     switch (argIdent) {
-                        case 'api:': flow.apiVersion = argValue; break;
-                        case 'api:status': flow.status = argValue; break;
-                        case 'api:environments': flow.environments = argValue; break;
-                        case 'flow:': flow.label = argValue; flow.interviewLabel = argValue + LabelPrefix; break;
+                        case 'flow:': flow.apiVersion = argValue; break;
+                        case 'flow:runInMode': flow.runInMode = argValue as FlowRunInMode; break;
+                        case 'flow:status': flow.status = argValue; break;
+                        case 'flow:environments': flow.environments = argValue; break;
                         case 'flow:interviewLabel': flow.interviewLabel = argValue; break;
-                        case 'flow:description': flow.description = argValue; break;
                         case 'sourceTemplate:': flow.sourceTemplate = argValue; break;
-                        case 'processMetadataValue:': processMetadataValueParse(flow, arg); break;
                         default: throw Error(`Unknown Decorator '${argIdent}'`);
                     }
                 });
@@ -251,7 +249,6 @@ export function flowBuild(s: Flow): ts.Node {
 
     // binding
     for (const t of [
-        // ['-', 'processMetadataValues', processMetadataValueBuild],
         ['-', 'steps', stepBuild],
         ['-', 'waits', waitBuild],
         ['r', 'choices', choiceBuild],
@@ -287,17 +284,12 @@ export function flowBuild(s: Flow): ts.Node {
         });
     }
 
-    // @api
-    const apiArgs: ts.Expression[] = [sf.createStringLiteral(s.apiVersion, true)];
-    if (s.status !== 'Active') apiArgs.push(sf.createBinaryExpression(sf.createIdentifier('status'), sk.EqualsToken, sf.createStringLiteral(s.status, true)));
-    if (s.environments) apiArgs.push(sf.createBinaryExpression(sf.createIdentifier('environments'), sk.EqualsToken, sf.createStringLiteral(s.environments, true)));
-    decorators.push(sf.createDecorator(sf.createCallExpression(sf.createIdentifier('api'), undefined, apiArgs)));
-
     // @flow
-    const flowArgs: ts.Expression[] = [sf.createStringLiteral(s.label, true)];
-    if (s.interviewLabel !== s.label + LabelPrefix) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('interviewLabel'), sk.EqualsToken, sf.createStringLiteral(s.interviewLabel, true)));
-    if (s.description) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('description'), sk.EqualsToken, sf.createStringLiteral(s.description, true)));
+    const flowArgs: ts.Expression[] = [sf.createStringLiteral(s.apiVersion, true)];
+    // if (s.interviewLabel !== s.label + LabelPrefix) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('interviewLabel'), sk.EqualsToken, sf.createStringLiteral(s.interviewLabel, true)));
     if (s.runInMode) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('runInMode'), sk.EqualsToken, sf.createStringLiteral(s.runInMode, true)));
+    if (s.status !== 'Active') flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('status'), sk.EqualsToken, sf.createStringLiteral(s.status, true)));
+    if (s.environments) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('environments'), sk.EqualsToken, sf.createStringLiteral(s.environments, true)));
     decorators.push(sf.createDecorator(sf.createCallExpression(sf.createIdentifier('flow'), undefined, flowArgs)));
 
     // @souceTemplate
@@ -327,7 +319,7 @@ export function flowBuild(s: Flow): ts.Node {
         /*typeParameters*/undefined,
         /*heritageClauses*/undefined,
         /*members*/members);
-    buildLeadingComment(decl, s.label, undefined, s.description, s.processMetadataValues);
+    buildLeadingComment(decl, s.label, s.interviewLabel, s.description, s.processMetadataValues);
     return decl;
 }
 
