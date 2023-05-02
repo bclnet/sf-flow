@@ -5,9 +5,10 @@ const sk = ts.SyntaxKind;
 // https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
 import { toArray } from '../utils';
 import {
+    buildLeadingComment,
     Context,
     Connector,
-    ProcessMetadataValue, processMetadataValueParse, processMetadataValueBuild,
+    ProcessMetadataValue, // processMetadataValueParse, processMetadataValueBuild,
     Step, stepParse, stepBuild,
     Wait, waitParse, waitBuild
 } from './flowCommon';
@@ -104,7 +105,7 @@ export function flowCreate(): Flow {
         start: undefined,
         // startElementReference: undefined,
         status: undefined,
-        // actionCalls: [],
+        actionCalls: [],
         apexPluginCalls: [],
         assignments: [],
         choices: [],
@@ -128,7 +129,7 @@ export function flowCreate(): Flow {
     };
 }
 
-export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
+export function flowParse(flow: Flow, s: ts.Node): void {
     let prevProp: ts.PropertyDeclaration;
     s.forEachChild(s1 => s1.forEachChild(c1 => {
         switch (c1.kind) {
@@ -162,7 +163,7 @@ export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
             case sk.DefaultKeyword:
                 break;
             case sk.Identifier:
-                //console.log(sk[c1.kind], c1.getText(src));
+                //console.log(sk[c1.kind], c1.getText(s.getSourceFile()));
                 break;
             case sk.PropertyDeclaration: {
                 const prop = c1 as ts.PropertyDeclaration;
@@ -188,52 +189,59 @@ export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
             case sk.MethodDeclaration: {
                 const method = c1 as ts.MethodDeclaration;
                 // eslint-disable-next-line complexity
-                startParse(flow, method, c2 => {
-                    const connector: Connector = undefined;
-                    switch (c2.kind) {
-                        case sk.FirstStatement: {
-                            const stmt = c2 as ts.VariableStatement;
-                            if (stmt.declarationList?.flags !== ts.NodeFlags.Const && stmt.declarationList.declarations.length !== 1) throw Error('Not sure NodeFlags/Length');
-                            const decl = stmt.declarationList.declarations[0];
-                            if (!decl.initializer) throw Error('Not sure initializer');
-                            const func = decl.initializer as ts.CallExpression;
-                            if (!func && func.kind !== sk.CallExpression) throw Error('no statement found');
-                            if (func.expression.kind !== sk.PropertyAccessExpression && (func.expression as ts.PropertyAccessExpression).expression.kind !== sk.ThisKeyword) throw Error('no statement found');
-                            const args = func.arguments;
-                            const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-                            const arg0text = (args[0] as ts.StringLiteral).text;
-                            if (funcName === 'query' && arg0text.startsWith('ACTION')) actionCallParse(flow, stmt, func, connector);
-                            else if (funcName === 'query' && arg0text.startsWith('APEX')) apexPluginCallParse(flow, stmt, func, connector);
-                            else if (funcName === 'query' && arg0text.startsWith('INSERT')) recordCreateParse(flow, stmt, func, connector);
-                            else if (funcName === 'query' && arg0text.startsWith('DELETE')) recordDeleteParse(flow, stmt, func, connector);
-                            else if (funcName === 'query' && arg0text.startsWith('SELECT')) recordLookupParse(flow, stmt, func, connector);
-                            else if (funcName === 'query' && arg0text.startsWith('UPDATE')) recordUpdateParse(flow, stmt, func, connector);
-                            else if (funcName === 'screen') screenParse(flow, stmt, func, connector);
-                            else if (funcName === 'subflow') subflowParse(flow, stmt, func, connector);
-                            else throw Error(`Unknown func '${funcName} ${arg0text}'`);
-                            // assignmentParse(flow, stmt);
-                            // recordRollbackParse(flow, stmt);
-                            break;
-                        }
-                        case sk.IfStatement: {
-                            const stmt = c2 as ts.IfStatement;
-                            decisionParse(flow, stmt, connector);
-                            //console.log(sk[c.kind], c.getText(src));
-                            break;
-                        }
-                        default:
-                            console.log(`!${sk[c2.kind]}`, c2.getText(src));
-                            break;
-                    }
-                });
+                startParse(flow, method);
                 break;
             }
             default:
-                console.log(`!${sk[c1.kind]}`, c1.getText(src));
+                console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile()));
                 break;
         }
     }));
     // console.log(flow);
+}
+
+export function flowParseBlock(flow: Flow, s: ts.Node): void {
+    if (!s) return;
+    const connector: Connector = undefined;
+    // eslint-disable-next-line complexity
+    s.forEachChild(c1 => {
+        // console.log(sk[c1.kind]);
+        switch (c1.kind) {
+            case sk.FirstStatement: {
+                const stmt = c1 as ts.VariableStatement;
+                if (stmt.declarationList?.flags !== ts.NodeFlags.Const && stmt.declarationList.declarations.length !== 1) throw Error('Not sure NodeFlags/Length');
+                const decl = stmt.declarationList.declarations[0];
+                if (!decl.initializer) throw Error('Not sure initializer');
+                const func = decl.initializer as ts.CallExpression;
+                if (!func && func.kind !== sk.CallExpression) throw Error('no statement found');
+                if (func.expression.kind !== sk.PropertyAccessExpression && (func.expression as ts.PropertyAccessExpression).expression.kind !== sk.ThisKeyword) throw Error('no statement found');
+                const args = func.arguments;
+                const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+                const arg0text = (args[0] as ts.StringLiteral).text;
+                if (funcName === 'query' && arg0text.startsWith('ACTION')) actionCallParse(flow, stmt, func, connector);
+                else if (funcName === 'query' && arg0text.startsWith('APEX')) apexPluginCallParse(flow, stmt, func, connector);
+                else if (funcName === 'query' && arg0text.startsWith('INSERT')) recordCreateParse(flow, stmt, func, connector);
+                else if (funcName === 'query' && arg0text.startsWith('DELETE')) recordDeleteParse(flow, stmt, func, connector);
+                else if (funcName === 'query' && arg0text.startsWith('SELECT')) recordLookupParse(flow, stmt, func, connector);
+                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) recordUpdateParse(flow, stmt, func, connector);
+                else if (funcName === 'screen') screenParse(flow, stmt, func, connector);
+                else if (funcName === 'subflow') subflowParse(flow, stmt, func, connector);
+                else throw Error(`Unknown func '${funcName} ${arg0text}'`);
+                // assignmentParse(flow, stmt);
+                // recordRollbackParse(flow, stmt);
+                break;
+            }
+            case sk.IfStatement: {
+                const stmt = c1 as ts.IfStatement;
+                decisionParse(flow, stmt, connector);
+                //console.log(sk[c1.kind], c.getText(s.getSourceFile()));
+                break;
+            }
+            default:
+                console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile()));
+                break;
+        }
+    });
 }
 
 /* eslint-disable complexity */
@@ -243,7 +251,7 @@ export function flowBuild(s: Flow): ts.Node {
 
     // binding
     for (const t of [
-        ['-', 'processMetadataValues', processMetadataValueBuild],
+        // ['-', 'processMetadataValues', processMetadataValueBuild],
         ['-', 'steps', stepBuild],
         ['-', 'waits', waitBuild],
         ['r', 'choices', choiceBuild],
@@ -315,10 +323,11 @@ export function flowBuild(s: Flow): ts.Node {
     const decl = sf.createClassDeclaration(
         /*decorators*/decorators,
         /*modifiers*/[sf.createToken(sk.ExportKeyword), sf.createToken(sk.DefaultKeyword)],
-        /*name*/sf.createIdentifier('theFlow'),
+        /*name*/sf.createIdentifier(s.fullName),
         /*typeParameters*/undefined,
         /*heritageClauses*/undefined,
         /*members*/members);
+    buildLeadingComment(decl, s.label, undefined, s.description, s.processMetadataValues);
     return decl;
 }
 

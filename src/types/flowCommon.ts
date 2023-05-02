@@ -43,10 +43,10 @@ export function buildLocation(name: string, locationX: number, locationY: number
 
 export function parseLeadingComment(s: ts.Node): [string, string, string, ProcessMetadataValue[]] {
     const c = getLeadingComments(s);
-    if (!c || c.length < 1 || c.length > 2) return [undefined, undefined, undefined, undefined];
-    const description = c.length > 1 ? c[0] : undefined;
+    if (!c || c.length < 1 || c.length > 2) return [undefined, undefined, undefined, []];
+    const description = c.length > 1 ? c[0].trim() : undefined;
     const values = c[c.length - 1].replace(']', '').split('[', 2);
-    return [values[0], values.length > 1 ? values[1] : undefined, description, undefined];
+    return [values[0].trim(), values.length > 1 ? values[1].trim() : undefined, description, []];
 }
 
 export function buildLeadingComment(s: ts.Statement, label: string, location: string, description: string, processMetadataValues: ProcessMetadataValue[]): void {
@@ -62,16 +62,16 @@ export function buildLeadingComment(s: ts.Statement, label: string, location: st
 //#region Query
 
 export function genericFromQuery(s: string, queryName: string, actionName: string): [string, string, string, string, string] {
-    const endx = s.length;
-    let queryx = s.indexOf(`${queryName} `); if (queryx === -1) throw Error(`missing ${queryName}`); queryx += queryName.length + 1;
-    let actionx = s.indexOf(`${actionName} `, queryx); if (actionx === -1) actionx = queryx; else actionx += 7;
+    const endx = s.length; const queryl = queryName.length + 1; const actionl = actionName.length + 1;
+    let queryx = s.indexOf(`${queryName} `); if (queryx === -1) throw Error(`missing ${queryName}`); queryx += queryl;
+    let actionx = s.indexOf(`${actionName} `, queryx); if (actionx === -1) actionx = queryx; else actionx += actionl;
     let fromx = s.indexOf('FROM ', actionx); if (fromx === -1) fromx = actionx; else fromx += 5;
     let wherex = s.indexOf('WHERE ', fromx); if (wherex === -1) wherex = fromx; else wherex += 6;
     let limitx = s.indexOf('LIMIT ', wherex); if (limitx === -1) limitx = endx; else limitx += 6;
-    const query = s.substring(queryx, queryx === actionx ? fromx - 6 : actionx - 8);
-    const action = queryx === actionx ? null : s.substring(actionx, fromx - 6);
-    const from = fromx === actionx ? null : s.substring(fromx, wherex === fromx ? limitx - 7 : wherex - 7);
-    const where = wherex === fromx ? null : s.substring(wherex, limitx === endx ? endx : limitx - 7);
+    const query = s.substring(queryx, queryx === actionx ? fromx - 6 : actionx - actionl - 1);
+    const action = queryx === actionx ? null : s.substring(actionx, actionx === fromx ? wherex - 7 : fromx - 6);
+    const from = fromx === actionx ? null : s.substring(fromx, fromx === wherex ? limitx - 7 : wherex - 7);
+    const where = wherex === fromx ? null : s.substring(wherex, endx === limitx ? endx : limitx - 7);
     const limit = limitx === endx ? null : s.substring(limitx, endx);
     // console.log(s);
     // console.log(`query:[${query}]`);
@@ -305,12 +305,12 @@ export interface ProcessMetadataValue {
     value?: Value;
 }
 
-export function processMetadataValueParse(flow: Flow, s: ts.Node): void {
-}
+// export function processMetadataValueParse(flow: Flow, s: ts.Node): void {
+// }
 
-/* eslint-disable complexity */
-export function processMetadataValueBuild(s: ProcessMetadataValue) {
-}
+// /* eslint-disable complexity */
+// export function processMetadataValueBuild(s: ProcessMetadataValue) {
+// }
 
 //#endregion
 
@@ -322,6 +322,12 @@ export interface InputAssignment {
 }
 
 export function inputAssignmentFromString(s: string): InputAssignment {
+    const values = s.split(' = ', 2);
+    if (values.length !== 2) throw Error(`inputAssignmentFromString '${s}'`);
+    return {
+        field: values[0],
+        value: valueFromString(values[1]),
+    };
 }
 
 export function inputAssignmentToString(s: InputAssignment): string {
@@ -334,6 +340,12 @@ export interface OutputAssignment {
 }
 
 export function outputAssignmentFromString(s: string): OutputAssignment {
+    const values = s.split(' = ', 2);
+    if (values.length !== 2) throw Error(`outputAssignmentFromString '${s}'`);
+    return {
+        assignToReference: values[0],
+        field: values[1],
+    };
 }
 
 export function outputAssignmentToString(s: OutputAssignment): string {

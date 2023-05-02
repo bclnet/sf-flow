@@ -2,6 +2,7 @@
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import * as fs from 'fs-extra';
+import { jsonStringify } from '../../../utils';
 
 // import { Flow } from '../../../types/flow';
 import FlowTsParser from '../../../flow/flowTsParser';
@@ -59,7 +60,7 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
             //const jsondir = flags.outdir ? flags.outdir : '.';
             const jsondir = './files.json2';
             await fs.ensureDir(jsondir);
-            fs.writeFileSync(`${jsondir}/${jsonPath}`, JSON.stringify(flow, null, '  '));
+            fs.writeFileSync(`${jsondir}/${jsonPath}`, jsonStringify(flow, '  '));
         }
     }
 }

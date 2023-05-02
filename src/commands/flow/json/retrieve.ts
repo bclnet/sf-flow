@@ -1,6 +1,7 @@
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages, AuthInfo, Connection } from '@salesforce/core';
 import * as fs from 'fs-extra';
+import { jsonStringify } from '../../../utils';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.load('sf-flow', 'flow.json.retrieve', [
@@ -52,7 +53,7 @@ export default class FlowJsonRetrieve extends SfCommand<FlowJsonRetrieveResult> 
         const targetPath = `${flags.path}.json`;
         const outdir = flags.outdir ? flags.outdir : '.';
         await fs.ensureDir(outdir);
-        fs.writeFileSync(`${outdir}/${targetPath}`, JSON.stringify(flow, null, '  '));
+        fs.writeFileSync(`${outdir}/${targetPath}`, jsonStringify(flow, '  '));
 
         const label: string = flow.label;
         this.log(`'${label}' flow retrieved.`);

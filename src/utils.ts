@@ -3,6 +3,13 @@ export function toArray<T = any>(elements): Array<T> {
     return elements ? Array.isArray(elements) ? elements : [elements] : [];
 }
 
+export function jsonStringify(obj: object, space: string): string {
+    //JSON.stringify(flow, Object.keys(flow).sort(), '  ')
+    const allKeys = new Set();
+    JSON.stringify(obj, (key, value) => (allKeys.add(key), value));
+    return JSON.stringify(obj, Array.from(allKeys).sort(), space);
+}
+
 export function unescapeHtml(target) {
     if (typeof target !== 'string') return target;
 

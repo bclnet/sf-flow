@@ -2,7 +2,10 @@ import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
 import { toPascalCase } from '../utils';
-import { Value, valueFromExpression, valueToExpression, valueFromString, valueToString } from './flowCommon';
+import {
+    ProcessMetadataValue,
+    Value, valueFromExpression, valueToExpression, valueFromString, valueToString
+} from './flowCommon';
 
 //#region Operator
 
@@ -84,27 +87,9 @@ export enum ConditionLogic {
 export interface Condition {
     leftValueReference: string;
     operator: Operator;
+    processMetadataValues: ProcessMetadataValue[];
     rightValue: Value;
 }
-
-// export function conditionFromString(s: string): Condition {
-//     // var parts = source.Split(' ', 3);
-//     // if (parts.Length != 3) throw new FormatException("condition expected 3 parts");
-//     // if (parts[1] == "is")
-//     // {
-//     //     parts[1] = parts[1] + parts[2][..4];
-//     //     parts[2] = parts[2][4..];
-//     // }
-//     // var (leftValueReference, op, rightValue) = (parts[0], parts[1], parts[2]);
-//     // return new Condition
-//     // {
-//     //     LeftValueReference = leftValueReference,
-//     //     Operator = FlowExtensions.OperatorParse(op),
-//     //     RightValue = Value.Parse(rightValue),
-//     // };
-
-//     throw Error('TBD');
-// }
 
 export function conditionsFromExpression(s: ts.Expression): [logic: ConditionLogic, conditions: Condition[]] {
     let c = s as ts.BinaryExpression;
@@ -144,8 +129,9 @@ export function conditionFromExpression(s: ts.Expression): Condition {
     return {
         leftValueReference,
         operator,
+        processMetadataValues: [],
         rightValue
-    } as Condition;
+    };
 }
 
 export function conditionToExpression(s: Condition): ts.Expression {

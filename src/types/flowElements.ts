@@ -3,9 +3,9 @@ import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
 import { objectPurge } from '../utils';
-import { Flow, FlowProcessType } from './flow';
+import { Flow, FlowProcessType, flowParseBlock } from './flow';
 import {
-    createStringLiteralX, buildLocation, parseLocation, getTrailingComments, parseLeadingComment, buildLeadingComment,
+    createStringLiteralX, buildLocation, parseLocation, parseLeadingComment, buildLeadingComment,
     genericFromQuery, genericToQuery,
     DataType, Value,
     Context,
@@ -233,29 +233,29 @@ export function decisionParse(f: Flow, s: ts.IfStatement, connector: Connector):
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [name, locationX, locationY] = parseLocation(location);
     function parseRule(k: ts.IfStatement): DecisionRule {
-        //console.log(k.thenStatement.getFullText());
-        console.log(getTrailingComments(k.thenStatement));
         const [conditionLogic, conditions] = conditionsFromExpression(k.expression);
         return {
-            name: '',
+            name: 'NAME',
             conditionLogic,
             conditions,
             connector: undefined,
-            label: undefined,
+            label: 'LABEL',
             processMetadataValues: [],
         } as DecisionRule;
     }
 
     const rules: DecisionRule[] = [];
+    let stmt = flowParseBlock(f, s.thenStatement);
     rules.push(parseRule(s));
     let c = s.elseStatement as ts.IfStatement;
     while (c.kind === sk.IfStatement) {
+        stmt = flowParseBlock(f, c.thenStatement);
         rules.push(parseRule(c));
         c = c.elseStatement as ts.IfStatement;
     }
-    //console.log(rules);
+    if (c.kind !== sk.Block) throw Error(`decisionParse expected Block '${sk[c.kind]}'`);
+    stmt = flowParseBlock(f, c);
 
-    //console.log(s.elseStatement);
     const prop = objectPurge({
         name,
         label,
@@ -583,7 +583,7 @@ export interface Start {
     build: Function;
 }
 
-export function startParse(f: Flow, s: ts.MethodDeclaration, parseChild: (s: ts.Node) => void): void {
+export function startParse(f: Flow, s: ts.MethodDeclaration): void { //, parseChild: (s: ts.Node) => void
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const name = (s.name as ts.Identifier).text;
@@ -609,7 +609,7 @@ export function startParse(f: Flow, s: ts.MethodDeclaration, parseChild: (s: ts.
         triggerType,
     }) as Start;
     f.start = method;
-    s.body?.forEachChild(parseChild);
+    flowParseBlock(f, s.body);
 }
 
 /* eslint-disable complexity */
@@ -766,7 +766,7 @@ function recordUpdateFromQuery(s: string): [filterLogic: string, filters: Record
         /*filterLogic*/filterLogic,
         /*filters*/filters,
         /*inputAssignments*/action ? action.split(', ').map(x => inputAssignmentFromString(x)) : undefined,
-        /*object*/!query.startsWith('$') ? s : undefined,
+        /*object*/!query.startsWith('$') ? query : undefined,
         /*inputReference*/query.startsWith('$') ? query.substring(1) : undefined];
 }
 

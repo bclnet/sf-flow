@@ -16,7 +16,7 @@ export default class FlowTsBuilder {
         const sourceFile = ts.createSourceFile(this.dataPath, this.data, ts.ScriptTarget.ES2015, /*setParentNodes */true);
         //this.printRecursiveFrom(sourceFile, 0, sourceFile);
         const flow = flowCreate();
-        flowParse(flow, sourceFile, sourceFile);
+        flowParse(flow, sourceFile);
         return flow;
     }
 
