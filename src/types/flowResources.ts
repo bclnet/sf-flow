@@ -2,14 +2,20 @@
 import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
+import { objectPurge } from '../utils';
 import { Flow } from './flow';
 import {
-    objectPurge, triviaGetComment,
+    getLeadingComments,
     DataType, Value, valueFromTypeNode, valueToTypeNode, valueFromExpression, valueToExpression,
     ProcessMetadataValue,
     OutputAssignment,
 } from './flowCommon';
 import { RecordFilter } from './flowOperators';
+
+function parseDescription(s: ts.Node): string {
+    const c = getLeadingComments(s);
+    return c?.length > 0 ? c[0] : undefined;
+}
 
 export interface Resource {
     description?: string;
@@ -40,7 +46,7 @@ export function choiceParse(f: Flow, s: ts.PropertyDeclaration): void {
         dataType,
         displayField: args.length > 2 ? (args[2] as ts.StringLiteral).text : undefined,
         value: valueFromExpression(args[1], dataType),
-        description: triviaGetComment(s),
+        description: parseDescription(s),
         processMetadataValues: [],
     }) as Choice;
     f.choices.push(prop);
@@ -87,7 +93,7 @@ export function dynamicChoiceSetParse(f: Flow, s: ts.PropertyDeclaration): void 
         name: s.name.getText(),
         dataType: (args[0] as ts.StringLiteral).text as DataType,
         displayField: (args[1] as ts.StringLiteral).text,
-        description: triviaGetComment(s),
+        description: parseDescription(s),
         processMetadataValues: [],
     }) as DynamicChoiceSet;
     f.dynamicChoiceSets.push(prop);
@@ -125,7 +131,7 @@ export function constantParse(f: Flow, s: ts.PropertyDeclaration): void {
         name: s.name.getText(),
         dataType,
         value: s.initializer ? valueFromExpression(s.initializer, dataType) : undefined,
-        description: triviaGetComment(s),
+        description: parseDescription(s),
         processMetadataValues: [],
     }) as Constant;
     f.constants.push(prop);
@@ -136,7 +142,7 @@ export function constantParse(f: Flow, s: ts.PropertyDeclaration): void {
 export function constantBuild(s: Constant) {
     const prop = sf.createPropertyDeclaration(
         /*decorators*/undefined,
-        /*modifiers*/[sf.createKeywordTypeNode(sk.ConstKeyword)],
+        /*modifiers*/[sf.createToken(sk.ConstKeyword)],
         /*name*/sf.createIdentifier(s.name),
         /*questionOrExclamationToken*/undefined,
         /*typeNode*/valueToTypeNode(false, s.dataType, 0),
@@ -171,7 +177,7 @@ export function formulaParse(f: Flow, s: ts.MethodDeclaration): void {
         dataType,
         expression: (args[0] as ts.StringLiteral).text,
         scale,
-        description: triviaGetComment(s),
+        description: parseDescription(s),
         processMetadataValues: [],
     }) as Formula;
     f.formulas.push(prop);
@@ -218,7 +224,7 @@ export function stageParse(f: Flow, s: ts.PropertyDeclaration): void {
         isActive: args.length > 2 ? args[2].kind === sk.TrueKeyword : true,
         label: (args[1] as ts.StringLiteral).text,
         stageOrder: Number((args[0] as ts.NumericLiteral).text),
-        description: triviaGetComment(s),
+        description: parseDescription(s),
         processMetadataValues: [],
     }) as Stage;
     f.stages.push(prop);
@@ -260,7 +266,7 @@ export function textTemplateParse(f: Flow, s: ts.PropertyDeclaration): void {
         name: s.name.getText(),
         isViewedAsPlainText: String(args.length > 1 ? args[1].kind === sk.TrueKeyword : false),
         text: (args[0] as ts.StringLiteral).text,
-        description: triviaGetComment(s),
+        description: parseDescription(s),
         processMetadataValues: [],
     }) as TextTemplate;
     f.textTemplates.push(prop);
@@ -311,7 +317,7 @@ export function variableParse(f: Flow, s: ts.PropertyDeclaration, p: ts.Property
         isOutput: decoratorName.includes('out'),
         objectType: dataType === DataType.SObject ? typeName : undefined,
         scale,
-        description: triviaGetComment(p ?? s),
+        description: parseDescription(p ?? s),
         processMetadataValues: [],
     }) as Variable;
     f.variables.push(prop);

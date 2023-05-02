@@ -2,19 +2,21 @@
 import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
-import { toPascalCase } from '../utils';
-import { FlowProcessType } from './flow';
+import { objectPurge } from '../utils';
+import { Flow, FlowProcessType } from './flow';
 import {
+    createStringLiteralX, buildLocation, parseLocation, getTrailingComments, parseLeadingComment, buildLeadingComment,
+    genericFromQuery, genericToQuery,
+    DataType, Value,
     Context,
     Connector,
     ProcessMetadataValue,
-    DataType, Value,
-    InputParameter, inputAssignmentToString, OutputParameter,
-    InputAssignment, OutputAssignment
+    InputParameter, OutputParameter,
+    InputAssignment, inputAssignmentFromString, inputAssignmentToString, OutputAssignment, outputAssignmentToString
 } from './flowCommon';
 import {
-    ConditionLogic, Condition, conditionsToExpression,
-    RecordFilter, recordFilterToString
+    ConditionLogic, Condition, conditionsFromExpression, conditionsToExpression,
+    RecordFilter, filterFromQuery, filterToQuery
 } from './flowOperators';
 
 export interface Element {
@@ -32,14 +34,14 @@ export interface Element {
 export interface ActionCall extends Element {
     actionName: string;
     actionType: string;
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
     inputParameters: InputParameter[];
     outputParameters: OutputParameter[];
     storeOutputAutomatically?: boolean;
 }
 
-export function actionCallParse(s: ts.Node): ActionCall {
+export function actionCallParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
 }
 
 /* eslint-disable complexity */
@@ -47,9 +49,9 @@ export function actionCallBuild(s: ActionCall, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
-    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('action'));
-    const args: ts.Expression[] = [sf.createStringLiteral(actionCallToQuery(s), false)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
+    const args: ts.Expression[] = [createStringLiteralX(actionCallToQuery(s))];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
@@ -57,8 +59,7 @@ export function actionCallBuild(s: ActionCall, ctx: Context): unknown {
             /*exclamationToken*/undefined,
             /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -76,11 +77,11 @@ function actionCallToQuery(s: ActionCall): string {
 //#region ApexPluginCall
 
 export interface ApexPluginCall extends Element {
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
 }
 
-export function apexPluginCallParse(s: ts.Node): ApexPluginCall {
+export function apexPluginCallParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
 }
 
 /* eslint-disable complexity */
@@ -88,9 +89,9 @@ export function apexPluginCallBuild(s: ApexPluginCall, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
-    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('apexPlugin'));
-    const args: ts.Expression[] = [sf.createStringLiteral(apexPluginCallToQuery(s), false)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
+    const args: ts.Expression[] = [createStringLiteralX(apexPluginCallToQuery(s))];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
@@ -98,8 +99,7 @@ export function apexPluginCallBuild(s: ApexPluginCall, ctx: Context): unknown {
                 /*exclamationToken*/undefined,
                 /*type*/undefined,
                 /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -137,11 +137,11 @@ export interface AssignmentItem {
 
 export interface Assignment extends Element {
     assignmentItems: AssignmentItem[];
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
 }
 
-export function assignmentParse(s: ts.Node): Assignment {
+export function assignmentParse(f: Flow, s: ts.VariableStatement): void {
 }
 
 /* eslint-disable complexity */
@@ -159,8 +159,7 @@ export function assignmentBuild(s: Assignment, ctx: Context): unknown {
     //             /*exclamationToken*/undefined,
     //             /*type*/undefined,
     //             /*initializer*/lambda)], ts.NodeFlags.Const));
-    // if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    // ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    // buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     // ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -172,7 +171,7 @@ export function assignmentBuild(s: Assignment, ctx: Context): unknown {
 export interface RecordCreate extends Element {
     actionType?: string;
     assignRecordIdToReference?: string;
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
     inputAssignments: InputAssignment[];
     inputReference?: string;
@@ -180,7 +179,7 @@ export interface RecordCreate extends Element {
     storeOutputAutomatically?: boolean;
 }
 
-export function recordCreateParse(s: ts.Node): RecordCreate {
+export function recordCreateParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
 }
 
 /* eslint-disable complexity */
@@ -188,9 +187,9 @@ export function recordCreateBuild(s: RecordCreate, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
-    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('insert'));
-    const args: ts.Expression[] = [sf.createStringLiteral(recordCreateToQuery(s), false)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
+    const args: ts.Expression[] = [createStringLiteralX(recordCreateToQuery(s))];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
@@ -198,8 +197,7 @@ export function recordCreateBuild(s: RecordCreate, ctx: Context): unknown {
             /*exclamationToken*/undefined,
             /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -220,18 +218,57 @@ export interface DecisionRule {
     name: string;
     conditionLogic: ConditionLogic;
     conditions: Condition[];
-    connector: Connector;
+    connector?: Connector;
     label: string;
     processMetadataValues: ProcessMetadataValue[];
 }
 
 export interface Decision extends Element {
     rules: DecisionRule[];
-    defaultConnector: Connector;
+    defaultConnector?: Connector;
     defaultConnectorLabel: string;
 }
 
-export function decisionParse(s: ts.Node): Decision {
+export function decisionParse(f: Flow, s: ts.IfStatement, connector: Connector): void {
+    const [label, location, description, processMetadataValues] = parseLeadingComment(s);
+    const [name, locationX, locationY] = parseLocation(location);
+    function parseRule(k: ts.IfStatement): DecisionRule {
+        //console.log(k.thenStatement.getFullText());
+        console.log(getTrailingComments(k.thenStatement));
+        const [conditionLogic, conditions] = conditionsFromExpression(k.expression);
+        return {
+            name: '',
+            conditionLogic,
+            conditions,
+            connector: undefined,
+            label: undefined,
+            processMetadataValues: [],
+        } as DecisionRule;
+    }
+
+    const rules: DecisionRule[] = [];
+    rules.push(parseRule(s));
+    let c = s.elseStatement as ts.IfStatement;
+    while (c.kind === sk.IfStatement) {
+        rules.push(parseRule(c));
+        c = c.elseStatement as ts.IfStatement;
+    }
+    //console.log(rules);
+
+    //console.log(s.elseStatement);
+    const prop = objectPurge({
+        name,
+        label,
+        locationX,
+        locationY,
+        description,
+        processMetadataValues,
+        rules,
+        defaultConnector: connector,
+        defaultConnectorLabel: '',
+    }) as Decision;
+    f.decisions.push(prop);
+    //console.log(prop);
 }
 
 /* eslint-disable complexity */
@@ -248,10 +285,7 @@ export function decisionBuild(s: Decision, ctx: Context): unknown {
         const block = ctx.buildBlock(r.connector) ?? sf.createBlock([]);
         ts.addSyntheticTrailingComment(block, sk.SingleLineCommentTrivia, ` ${r.label} [${r.name}]`, true);
         stmt = elseStmt = sf.createIfStatement(expr, block, elseStmt);
-        if (i === 0) {
-            if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-            ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
-        }
+        if (i === 0) buildLeadingComment(stmt, s.label, buildLocation(s.name, s.locationX, s.locationY), s.description, s.processMetadataValues);
     }
     ctx.stmts.push(stmt);
 }
@@ -265,7 +299,7 @@ export interface RecordDelete extends Element {
     faultConnector?: Connector;
 }
 
-export function recordDeleteParse(s: ts.Node): RecordDelete {
+export function recordDeleteParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
 }
 
 /* eslint-disable complexity */
@@ -273,9 +307,9 @@ export function recordDeleteBuild(s: RecordDelete, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
-    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('delete'));
-    const args: ts.Expression[] = [sf.createStringLiteral(recordDeleteToQuery(s), false)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
+    const args: ts.Expression[] = [createStringLiteralX(recordDeleteToQuery(s))];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
@@ -283,8 +317,7 @@ export function recordDeleteBuild(s: RecordDelete, ctx: Context): unknown {
             /*exclamationToken*/undefined,
             /*type*/undefined, //sf.createTypeReferenceNode('RecordUpdate'),
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -296,11 +329,7 @@ function recordDeleteToQuery(s: RecordDelete): string {
     const b = ['DELETE'];
     // b.push(` ${(s.queriedFields?.length > 0 ? s.queriedFields.join(', ') : '*')}`);
     // b.push(` FROM ${s.object}`);
-    // switch (s.filterLogic) {
-    //     case null: break;
-    //     case 'and': case 'or': b.push(` WHERE ${s.filters.map(x => recordFilterToString(x)).join(` ${s.filterLogic}`)}`); break;
-    //     default: b.push(` WHERE ${s.filterLogic}`); break;
-    // }
+    //b.push(filterToQuery(s.filterLogic, s.filters));
     return b.join('');
 }
 
@@ -312,20 +341,48 @@ function recordDeleteToQuery(s: RecordDelete): string {
 //#region GetRecords - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_data_get.htm&type=5
 
 export interface RecordLookup extends Element {
-    assignNullValuesIfNoRecordsFound?: boolean;
-    connector: Connector;
+    assignNullValuesIfNoRecordsFound: boolean;
+    connector?: Connector;
     faultConnector?: Connector;
     filterLogic?: string;
     filters?: RecordFilter[];
     getFirstRecordOnly?: boolean;
-    object?: string;
-    outputAssignments?: OutputAssignment[];
+    object: string;
+    outputAssignments: OutputAssignment[];
     outputReference?: string;
     queriedFields?: string[];
-    storeOutputAutomatically?: boolean;
+    storeOutputAutomatically: boolean;
 }
 
-export function recordLookupParse(s: ts.Node): RecordLookup {
+export function recordLookupParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
+    const [label, location, description, processMetadataValues] = parseLeadingComment(s);
+    const [, locationX, locationY] = parseLocation(location);
+    const decl = s.declarationList.declarations[0];
+    const args = func.arguments;
+    const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    const [queriedFields, filterLogic, filters, getFirstRecordOnly, object, outputAssignments, outputReference, storeOutputAutomatically] = recordLookupFromQuery((args[0] as ts.StringLiteral).text);
+    const prop = objectPurge({
+        name: (decl.name as ts.Identifier).text,
+        label,
+        locationX,
+        locationY,
+        description,
+        processMetadataValues,
+        assignNullValuesIfNoRecordsFound: decl.exclamationToken?.kind === sk.ExclamationToken,
+        connector,
+        faultConnector: args.length > 1 ? Context.parseTargetFaultArgument(s) : undefined,
+        filterLogic,
+        filters,
+        getFirstRecordOnly,
+        object,
+        outputAssignments,
+        outputReference,
+        queriedFields,
+        storeOutputAutomatically,
+    }) as RecordLookup;
+    f.recordLookups.push(prop);
+    //console.log(prop);
 }
 
 /* eslint-disable complexity */
@@ -334,35 +391,43 @@ export function recordLookupBuild(s: RecordLookup, ctx: Context): unknown {
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [sf.createStringLiteral(recordLookupToQuery(s), false)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const args: ts.Expression[] = [createStringLiteralX(recordLookupToQuery(s))];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
             /*name*/sf.createIdentifier(s.name),
-            /*exclamationToken*/undefined,
-            /*type*/undefined, //sf.createTypeReferenceNode('RecordLookup'),
+            /*exclamationToken*/s.assignNullValuesIfNoRecordsFound ? sf.createToken(sk.ExclamationToken) : undefined,
+            /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
 
-function recordLookupFromQuery(s: string) {
+function recordLookupFromQuery(s: string): [queriedFields: string[], filterLogic: string, filters: RecordFilter[], getFirstRecordOnly: boolean, object: string, outputAssignments: OutputAssignment[], outputReference: string, storeOutputAutomatically: boolean] {
+    const [query, action, from, where, limit] = genericFromQuery(s, 'SELECT', 'OUTPUT');
+    const [filterLogic, filters] = filterFromQuery(where);
+    return [
+        /*queriedFields*/query === '*' ? undefined : query.split(',').map(x => x.trim()),
+        /*filterLogic*/filterLogic,
+        /*filters*/filters,
+        /*getFirstRecordOnly*/limit !== '1',
+        /*object*/from,
+        /*outputAssignments*/action && !action?.startsWith(':') ? undefined : undefined,
+        /*outputReference*/action?.startsWith(':') ? action.substring(1) : undefined,
+        /*storeOutputAutomatically*/false];
 }
 
 function recordLookupToQuery(s: RecordLookup): string {
-    const b = ['SELECT'];
-    b.push(` ${(s.queriedFields?.length > 0 ? s.queriedFields.join(', ') : '*')}`);
-    b.push(` FROM ${s.object}`);
-    switch (s.filterLogic) {
-        case null: break;
-        case 'and': case 'or': b.push(` WHERE ${s.filters.map(x => recordFilterToString(x)).join(` ${toPascalCase(s.filterLogic)} `)}`); break;
-        default: b.push(` WHERE ${s.filterLogic}`); break;
-    }
-    if (s.getFirstRecordOnly) b.push(' LIMIT 1');
-    return b.join('');
+    return genericToQuery('SELECT', 'OUTPUT',
+        /*query*/s.queriedFields?.length > 0 ? s.queriedFields.join(', ') : '*',
+        /*action*/s.outputAssignments.length > 0 ? s.outputAssignments.map(x => outputAssignmentToString(x)).join(', ')
+            : s.outputReference ? `:${s.outputReference}`
+                : undefined,
+        /*from*/s.object,
+        /*where*/filterToQuery(s.filterLogic, s.filters),
+        /*limit*/s.getFirstRecordOnly ? '1' : undefined);
 }
 
 //#endregion
@@ -376,10 +441,10 @@ export interface Loop extends Element {
     collectionReference?: string;
     iterationOrder: LoopIterationOrder;
     nextValueConnector?: Connector;
-    noMoreValuesConnector: Connector;
+    noMoreValuesConnector?: Connector;
 }
 
-export function loopParse(s: ts.Node): Loop {
+export function loopParse(f: Flow, s: ts.ForStatement): void {
 }
 
 /* eslint-disable complexity */
@@ -393,11 +458,11 @@ export function loopBuild(s: Loop, ctx: Context): unknown {
 //#region RecordRollback
 
 export interface RecordRollback extends Element {
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
 }
 
-export function recordRollbackParse(s: ts.Node): RecordRollback {
+export function recordRollbackParse(f: Flow, s: ts.CallExpression): void {
 }
 
 /* eslint-disable complexity */
@@ -407,16 +472,15 @@ export function recordRollbackBuild(s: RecordRollback, ctx: Context): unknown {
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('rollback'));
     const args: ts.Expression[] = [];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
             /*name*/sf.createIdentifier(s.name),
             /*exclamationToken*/undefined,
-            /*type*/undefined, //sf.createTypeReferenceNode('Rollback'),
+            /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -463,14 +527,14 @@ export interface Screen extends Element {
     allowBack: boolean;
     allowFinish: boolean;
     allowPause: boolean;
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
     fields: ScreenField[];
     showFooter: boolean;
     showHeader: boolean;
 }
 
-export function screenParse(s: ts.Node): Screen {
+export function screenParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
 }
 
 /* eslint-disable complexity */
@@ -479,17 +543,16 @@ export function screenBuild(s: Screen, ctx: Context): unknown {
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('screen'));
-    const args: ts.Expression[] = [sf.createStringLiteral('SCREEN', true)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const args: ts.Expression[] = [createStringLiteralX('SCREEN')];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
             /*name*/sf.createIdentifier(s.name),
             /*exclamationToken*/undefined,
-            /*type*/undefined, //sf.createTypeReferenceNode('Screen'),
+            /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -508,7 +571,7 @@ export interface Start {
     description: string;
     locationX: number;
     locationY: number;
-    connector: Connector;
+    connector?: Connector;
     schedule?: StartSchedule;
     filterFormula?: string;
     object?: string;
@@ -520,7 +583,33 @@ export interface Start {
     build: Function;
 }
 
-export function startParse(s: ts.Node): Start {
+export function startParse(f: Flow, s: ts.MethodDeclaration, parseChild: (s: ts.Node) => void): void {
+    const [label, location, description, processMetadataValues] = parseLeadingComment(s);
+    const [, locationX, locationY] = parseLocation(location);
+    const name = (s.name as ts.Identifier).text;
+    let triggerType: string;
+    switch (name) {
+        case 'orphan': break;
+        case 'processBuilder': f.processType = FlowProcessType.CustomEvent; triggerType = undefined; break;
+        case 'screen': f.processType = FlowProcessType.Flow; triggerType = undefined; break;
+        case 'scheduled': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = 'Scheduled'; break;
+        case 'recordAfterSave': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = 'RecordAfterSave'; break;
+        case 'recordBeforeSave': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = 'RecordBeforeSave'; break;
+        case 'platformEvent': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = 'PlatformEvent'; break;
+        case 'start': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = undefined; break;
+        default: throw Error(`Unknown Start ${name}`);
+    }
+    const method = objectPurge({
+        label,
+        locationX,
+        locationY,
+        description,
+        processMetadataValues,
+        connector: undefined,
+        triggerType,
+    }) as Start;
+    f.start = method;
+    s.body?.forEachChild(parseChild);
 }
 
 /* eslint-disable complexity */
@@ -556,14 +645,35 @@ export function startBuild(s: Start, processType: FlowProcessType, block: ts.Blo
 //#region Subflow - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_subflow.htm&type=5
 
 export interface Subflow extends Element {
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
     flowName: string;
     inputAssignments: InputAssignment[];
     outputAssignments: OutputAssignment[];
 }
 
-export function subflowParse(s: ts.Node): Subflow {
+export function subflowParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
+    const [label, location, description, processMetadataValues] = parseLeadingComment(s);
+    const [, locationX, locationY] = parseLocation(location);
+    const decl = s.declarationList.declarations[0];
+    const args = func.arguments;
+    const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    const prop = objectPurge({
+        name: (decl.name as ts.Identifier).text,
+        label,
+        locationX,
+        locationY,
+        description,
+        processMetadataValues,
+        connector,
+        faultConnector: args.length > 3 ? Context.parseTargetFaultArgument(s) : undefined,
+        flowName: (args[0] as ts.StringLiteral).text,
+        // inputAssignments: (args[1] as ts.StringLiteral).text,
+        // outputAssignments: (args[2] as ts.StringLiteral).text,
+    }) as Subflow;
+    f.subflows.push(prop);
+    //console.log(prop);
 }
 
 /* eslint-disable complexity */
@@ -572,17 +682,18 @@ export function subflowBuild(s: Subflow, ctx: Context): unknown {
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('subflow'));
-    const args: ts.Expression[] = [sf.createStringLiteral(s.flowName, true)];
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const args: ts.Expression[] = [createStringLiteralX(s.flowName)];
+    // args.push(s.inputAssignments ? sf.createNodeArray(s.inputAssignments.map(x => createStringLiteralX(inputAssignmentToString(x)))) : sf.createNull());
+    // args.push(s.outputAssignments ? sf.createNodeArray(s.outputAssignments.map(x => createStringLiteralX(outputAssignmentToString(x)))) : sf.createNull());
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
             /*name*/sf.createIdentifier(s.name),
             /*exclamationToken*/undefined,
-            /*type*/undefined, //sf.createTypeReferenceNode('Subflow'),
+            /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
@@ -592,8 +703,7 @@ export function subflowBuild(s: Subflow, ctx: Context): unknown {
 //#region UpdateRecords - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_data_update.htm&type=5
 
 export interface RecordUpdate extends Element {
-    actionType?: string;
-    connector: Connector;
+    connector?: Connector;
     faultConnector?: Connector;
     filterLogic: string;
     filters: RecordFilter[];
@@ -602,7 +712,31 @@ export interface RecordUpdate extends Element {
     inputReference?: string;
 }
 
-export function recordUpdateParse(s: ts.Node): RecordUpdate {
+export function recordUpdateParse(f: Flow, s: ts.VariableStatement, func: ts.CallExpression, connector: Connector): void {
+    const [label, location, description, processMetadataValues] = parseLeadingComment(s);
+    const [, locationX, locationY] = parseLocation(location);
+    const decl = s.declarationList.declarations[0];
+    const args = func.arguments;
+    const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    const [filterLogic, filters, inputAssignments, object, inputReference] = recordUpdateFromQuery((args[0] as ts.StringLiteral).text);
+    const prop = objectPurge({
+        name: (decl.name as ts.Identifier).text,
+        label,
+        locationX,
+        locationY,
+        description,
+        processMetadataValues,
+        connector,
+        faultConnector: args.length > 1 ? Context.parseTargetFaultArgument(s) : undefined,
+        filterLogic,
+        filters,
+        inputAssignments,
+        object,
+        inputReference,
+    }) as RecordUpdate;
+    f.recordUpdates.push(prop);
+    //console.log(prop);
 }
 
 /* eslint-disable complexity */
@@ -610,36 +744,39 @@ export function recordUpdateBuild(s: RecordUpdate, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
-    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('update'));
-    const args: ts.Expression[] = [sf.createStringLiteral(recordUpdateToQuery(s), false)];
-    if (s.inputReference) args.push(sf.createStringLiteral(s.inputReference, true));
-    if (s.faultConnector) args.push(Context.targetFaultArgument(s.faultConnector));
+    const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
+    const args: ts.Expression[] = [createStringLiteralX(recordUpdateToQuery(s))];
+    if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
             /*name*/sf.createIdentifier(s.name),
             /*exclamationToken*/undefined,
-            /*type*/undefined, //sf.createTypeReferenceNode('RecordUpdate'),
+            /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
-    if (s.description) ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.description}`, true);
-    ts.addSyntheticLeadingComment(stmt, sk.SingleLineCommentTrivia, ` ${s.label} [${s.locationX}, ${s.locationY}]`, true);
+    buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
     ctx.build(s.connector);
 }
 
-function recordUpdateFromQuery(s: string) {
+function recordUpdateFromQuery(s: string): [filterLogic: string, filters: RecordFilter[], inputAssignments: InputAssignment[], object: string, inputReference: string] {
+    const [query, action, , where,] = genericFromQuery(s, 'UPDATE', 'SET');
+    const [filterLogic, filters] = filterFromQuery(where);
+    return [
+        /*filterLogic*/filterLogic,
+        /*filters*/filters,
+        /*inputAssignments*/action ? action.split(', ').map(x => inputAssignmentFromString(x)) : undefined,
+        /*object*/!query.startsWith('$') ? s : undefined,
+        /*inputReference*/query.startsWith('$') ? query.substring(1) : undefined];
 }
 
 function recordUpdateToQuery(s: RecordUpdate): string {
-    const b = ['UPDATE'];
-    b.push(` ${s.object ?? `:${s.inputReference}`}`);
-    b.push(` SET ${s.inputAssignments.map(x => inputAssignmentToString(x)).join()}`);
-    switch (s.filterLogic) {
-        case null: break;
-        case 'and': case 'or': b.push(` WHERE ${s.filters.map(x => recordFilterToString(x)).join(` ${toPascalCase(s.filterLogic)} `)}`); break;
-        default: b.push(` WHERE ${s.filterLogic}`); break;
-    }
-    return b.join('');
+    return genericToQuery('UPDATE', 'SET',
+        /*query*/s.object ?? `$${s.inputReference}`,
+        /*action*/s.inputAssignments.length > 0 ? s.inputAssignments.map(x => inputAssignmentToString(x)).join(', ') : undefined,
+        /*from*/undefined,
+        /*where*/filterToQuery(s.filterLogic, s.filters),
+        /*limit*/undefined);
 }
 
 //#endregion

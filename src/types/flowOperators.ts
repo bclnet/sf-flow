@@ -1,9 +1,10 @@
 import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
-import { Value, valueToExpression, valueToString } from './flowCommon';
+import { toPascalCase } from '../utils';
+import { Value, valueFromExpression, valueToExpression, valueFromString, valueToString } from './flowCommon';
 
-//#region Conditions - https://help.salesforce.com/s/articleView?id=sf.flow_ref_operators_condition.htm&type=5
+//#region Operator
 
 export enum Operator {
     DoesNotEqual = 'DoesNotEqual',
@@ -15,19 +16,45 @@ export enum Operator {
     Contains = 'Contains',
 }
 
-export function operatorFromString(s: string): Operator {
-    throw Error('TBD');
+export function operatorFromString(s: string): [Operator, string, Value] {
+    const [left, op, right] = s.split(' ', 3);
+    switch (op) {
+        case '!==': return [Operator.DoesNotEqual, left, valueFromString(right)];
+        case '=': return [Operator.EqualTo, left, valueFromString(right)];
+        case 'in': return right === 'null' || right === '!null'
+            ? [Operator.IsNull, left, { booleanValue: right === 'null' } as Value]
+            : [Operator.Contains, left, valueFromString(right)];
+        case '!=': return [Operator.NotEqualTo, left, valueFromString(right)];
+        case '>': return [Operator.GreaterThan, left, valueFromString(right)];
+        case '>=': return [Operator.LessThanOrEqualTo, left, valueFromString(right)];
+        default: throw Error(`Unknown Operator ${op}`);
+    }
 }
 
-export function operatorToString(s: Operator): string {
+export function operatorToString(s: Operator, left: string, right: Value): string {
     switch (s) {
-        case Operator.DoesNotEqual: return '!==';
-        case Operator.EqualTo: return '=';
-        case Operator.IsNull: return 'is null';
-        case Operator.NotEqualTo: return '!=';
-        case Operator.GreaterThan: return '>';
-        case Operator.Contains: return 'in';
-        case Operator.LessThanOrEqualTo: return '>=';
+        case Operator.DoesNotEqual: return `${left} !== ${valueToString(right)}`;
+        case Operator.EqualTo: return `${left} = ${valueToString(right)}`;
+        case Operator.IsNull: return `${left} in ${right.booleanValue ? 'null' : '!null'}`;
+        case Operator.NotEqualTo: return `${left} != ${valueToString(right)}`;
+        case Operator.GreaterThan: return `${left} > ${valueToString(right)}`;
+        case Operator.Contains: return `${left} in ${valueToString(right)}`;
+        case Operator.LessThanOrEqualTo: return `${left} >= ${valueToString(right)}`;
+        default: throw Error(`Unknown Operator ${s}`);
+    }
+}
+
+export function operatorFromExpression(s: ts.BinaryExpression): [operator: Operator, left: string, right: Value] {
+    const left = s.left.getText(); const right = s.right;
+    switch (s.operatorToken.kind) {
+        case sk.ExclamationEqualsEqualsToken: return [Operator.DoesNotEqual, left, valueFromExpression(right)];
+        case sk.EqualsEqualsToken: return [Operator.EqualTo, left, valueFromExpression(right)];
+        case sk.InKeyword: return right.kind === sk.NullKeyword || right.kind === sk.PrefixUnaryExpression
+            ? [Operator.IsNull, left, { booleanValue: right.kind === sk.NullKeyword } as Value]
+            : [Operator.Contains, left, valueFromExpression(right)];
+        case sk.ExclamationEqualsToken: return [Operator.NotEqualTo, left, valueFromExpression(right)];
+        case sk.GreaterThanToken: return [Operator.GreaterThan, left, valueFromExpression(right)];
+        case sk.LessThanEqualsToken: return [Operator.LessThanOrEqualTo, left, valueFromExpression(right)];
         default: throw Error(`Unknown Operator ${s}`);
     }
 }
@@ -35,8 +62,8 @@ export function operatorToString(s: Operator): string {
 export function operatorToExpression(s: Operator, left: ts.Expression, right: ts.Expression): ts.BinaryExpression {
     switch (s) {
         case Operator.DoesNotEqual: return sf.createBinaryExpression(left, sk.ExclamationEqualsEqualsToken, right);
-        case Operator.EqualTo: return sf.createBinaryExpression(left, sk.EqualsToken, right);
-        case Operator.IsNull: return sf.createBinaryExpression(left, sk.IsKeyword, right.kind === sk.TrueKeyword ? sf.createNull() : sf.createLogicalNot(sf.createNull()));
+        case Operator.EqualTo: return sf.createBinaryExpression(left, sk.EqualsEqualsToken, right);
+        case Operator.IsNull: return sf.createBinaryExpression(left, sk.InKeyword, right.kind === sk.TrueKeyword ? sf.createNull() : sf.createPrefixUnaryExpression(sk.ExclamationToken, sf.createNull()));
         case Operator.NotEqualTo: return sf.createBinaryExpression(left, sk.ExclamationEqualsToken, right);
         case Operator.GreaterThan: return sf.createBinaryExpression(left, sk.GreaterThanToken, right);
         case Operator.Contains: return sf.createBinaryExpression(left, sk.InKeyword, right);
@@ -44,6 +71,10 @@ export function operatorToExpression(s: Operator, left: ts.Expression, right: ts
         default: throw Error(`Unknown Operator ${s}`);
     }
 }
+
+//#endregion
+
+//#region Conditions - https://help.salesforce.com/s/articleView?id=sf.flow_ref_operators_condition.htm&type=5
 
 export enum ConditionLogic {
     and = 'and',
@@ -56,23 +87,42 @@ export interface Condition {
     rightValue: Value;
 }
 
-export function conditionFromString(s: string): Condition {
-    // var parts = source.Split(' ', 3);
-    // if (parts.Length != 3) throw new FormatException("condition expected 3 parts");
-    // if (parts[1] == "is")
-    // {
-    //     parts[1] = parts[1] + parts[2][..4];
-    //     parts[2] = parts[2][4..];
-    // }
-    // var (leftValueReference, op, rightValue) = (parts[0], parts[1], parts[2]);
-    // return new Condition
-    // {
-    //     LeftValueReference = leftValueReference,
-    //     Operator = FlowExtensions.OperatorParse(op),
-    //     RightValue = Value.Parse(rightValue),
-    // };
+// export function conditionFromString(s: string): Condition {
+//     // var parts = source.Split(' ', 3);
+//     // if (parts.Length != 3) throw new FormatException("condition expected 3 parts");
+//     // if (parts[1] == "is")
+//     // {
+//     //     parts[1] = parts[1] + parts[2][..4];
+//     //     parts[2] = parts[2][4..];
+//     // }
+//     // var (leftValueReference, op, rightValue) = (parts[0], parts[1], parts[2]);
+//     // return new Condition
+//     // {
+//     //     LeftValueReference = leftValueReference,
+//     //     Operator = FlowExtensions.OperatorParse(op),
+//     //     RightValue = Value.Parse(rightValue),
+//     // };
 
-    throw Error('TBD');
+//     throw Error('TBD');
+// }
+
+export function conditionsFromExpression(s: ts.Expression): [logic: ConditionLogic, conditions: Condition[]] {
+    let c = s as ts.BinaryExpression;
+    const operatorKind = c.operatorToken.kind;
+    let logic: ConditionLogic;
+    switch (operatorKind) {
+        case sk.AmpersandAmpersandToken: logic = ConditionLogic.and; break;
+        case sk.BarBarToken: logic = ConditionLogic.or; break;
+        default: logic = ConditionLogic.and; break;
+    };
+    const conditions: Condition[] = [];
+    while (c.operatorToken.kind === sk.AmpersandAmpersandToken || c.operatorToken.kind === sk.BarBarToken) {
+        conditions.push(conditionFromExpression(c.right));
+        c = c.left as ts.BinaryExpression;
+    }
+    conditions.push(conditionFromExpression(c));
+    conditions.reverse();
+    return [logic, conditions];
 }
 
 export function conditionsToExpression(logic: ConditionLogic, s: Condition[]): ts.Expression {
@@ -87,6 +137,15 @@ export function conditionsToExpression(logic: ConditionLogic, s: Condition[]): t
     return s.length === 0
         ? expr
         : s.reduce((left, c) => sf.createBinaryExpression(left, operator, conditionToExpression(c)), expr);
+}
+
+export function conditionFromExpression(s: ts.Expression): Condition {
+    const [operator, leftValueReference, rightValue] = operatorFromExpression(s as ts.BinaryExpression);
+    return {
+        leftValueReference,
+        operator,
+        rightValue
+    } as Condition;
 }
 
 export function conditionToExpression(s: Condition): ts.Expression {
@@ -104,10 +163,40 @@ export interface RecordFilter {
 }
 
 export function recordFilterFromString(s: string): RecordFilter {
+    const [operator, field, value] = operatorFromString(s);
+    return {
+        field,
+        operator,
+        value
+    } as RecordFilter;
 }
 
 export function recordFilterToString(s: RecordFilter): string {
-    return `${s.field} ${operatorToString(s.operator)} ${valueToString(s.value)}`;
+    return operatorToString(s.operator, s.field, s.value);
+}
+
+export function filterFromQuery(s: string): [string, RecordFilter[]] {
+    if (!s) return [null, undefined];
+    const where = s.startsWith('#') ? [s.substring(s.indexOf('; ') + 2), s.substring(1, s.indexOf('; '))] : [s, undefined];
+    const seperator = s.startsWith('#') ? '; '
+        : s.includes('=') && s.includes(' And ') ? ' And '
+            : s.includes('=') && s.includes(' Or ') ? ' Or '
+                : ' And ';
+    const filterLogic = seperator === '; ' ? where[1]
+        : seperator === ' And ' ? 'and'
+            : seperator === ' Or ' ? 'or'
+                : 'and';
+    const filters = where[0].split(seperator).map(x => recordFilterFromString(x));
+    return [filterLogic, filters];
+}
+
+export function filterToQuery(filterLogic: string, filters: RecordFilter[]): string {
+    const where = filters.map(x => recordFilterToString(x)).join('\0');
+    switch (filterLogic) {
+        case null: break;
+        case 'and': case 'or': return where.replaceAll('\0', ` ${toPascalCase(filterLogic)} `) as string; break;
+        default: return `#${filterLogic}; ${where.replaceAll('\0', '; ') as string}`; break;
+    }
 }
 
 //#endregion

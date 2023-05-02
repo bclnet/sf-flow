@@ -21,6 +21,11 @@ export function unescapeHtml(target) {
     });
 }
 
+export function objectPurge(s: object): object {
+    Object.keys(s).forEach(k => s[k] === undefined && delete s[k])
+    return s;
+}
+
 export function toPascalCase(s: string): string {
     return s.replace(/(\w)(\w*)/g, (g0, g1, g2) => g1.toUpperCase() + g2.toLowerCase());
 }

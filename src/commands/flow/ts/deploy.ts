@@ -55,11 +55,11 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
         const flow = fp.toFlow();
 
         if (true) {
-            const checkPath = `${flags.path}.json`;
+            const jsonPath = `${flags.path}.json`;
             //const jsondir = flags.outdir ? flags.outdir : '.';
-            const checkdir = './files.check';
-            await fs.ensureDir(checkdir);
-            fs.writeFileSync(`${checkdir}/${checkPath}`, JSON.stringify(flow, null, '  '));
+            const jsondir = './files.json2';
+            await fs.ensureDir(jsondir);
+            fs.writeFileSync(`${jsondir}/${jsonPath}`, JSON.stringify(flow, null, '  '));
         }
     }
 }

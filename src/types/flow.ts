@@ -40,9 +40,12 @@ const LabelPrefix = ' {!$Flow.CurrentDateTime}';
 
 //#region Flow - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_assignment.htm&type=5
 
-// export enum FlowRunInModes { Default, DefaultMode }
+export enum FlowRunInMode {
+    DefaultMode = 'DefaultMode',
+    SystemModeWithoutSharing = 'SystemModeWithoutSharing',
+}
+
 export enum FlowProcessType {
-    Default = undefined,
     Flow = 'Flow',
     AutoLaunchedFlow = 'AutoLaunchedFlow',
     CustomEvent = 'CustomEvent',
@@ -52,84 +55,85 @@ export enum FlowProcessType {
 export interface Flow {
     fullName: string;
     apiVersion: string;
-    decisions?: Decision[];
     description: string;
-    environments?: string;
+    environments: string;
     interviewLabel: string;
     label: string;
-    processMetadataValues?: ProcessMetadataValue[];
+    processMetadataValues: ProcessMetadataValue[];
     processType: FlowProcessType;
-    recordLookups?: RecordLookup[];
-    recordRollbacks?: RecordRollback;
-    recordUpdates?: RecordUpdate[];
+    runInMode?: FlowRunInMode;
+    sourceTemplate?: string;
     start: Start;
     startElementReference?: string;
     status: string;
-    variables?: Variable[];
     actionCalls?: ActionCall[];
-    apexPluginCalls?: ApexPluginCall[];
-    assignments?: Assignment[];
-    choices?: Choice[];
-    constants?: Constant[];
-    dynamicChoiceSets?: DynamicChoiceSet[];
-    formulas?: Formula[];
-    loops?: Loop[];
-    recordCreates?: RecordCreate[];
-    recordDeletes?: RecordDelete[];
-    screens?: Screen[];
-    stages?: Stage[];
-    // runInMode?: FlowRunInMode;
-    steps?: Step[];
-    subflows?: Subflow[];
-    textTemplates?: TextTemplate[];
-    waits?: Wait[];
-    //
-    sourceTemplate?: string;
+    apexPluginCalls: ApexPluginCall[];
+    assignments: Assignment[];
+    choices: Choice[];
+    constants: Constant[];
+    decisions: Decision[];
+    dynamicChoiceSets: DynamicChoiceSet[];
+    formulas: Formula[];
+    loops: Loop[];
+    recordCreates: RecordCreate[];
+    recordDeletes: RecordDelete[];
+    recordLookups: RecordLookup[];
+    recordRollbacks?: RecordRollback;
+    recordUpdates: RecordUpdate[];
+    screens: Screen[];
+    stages: Stage[];
+    steps: Step[];
+    subflows: Subflow[];
+    textTemplates: TextTemplate[];
+    variables: Variable[];
+    waits: Wait[];
 }
 
 export function flowCreate(): Flow {
     return {
         fullName: undefined,
         apiVersion: undefined,
-        decisions: [],
         description: undefined,
-        // environments: undefined,
+        environments: undefined,
         interviewLabel: undefined,
         label: undefined,
         processMetadataValues: [],
         processType: undefined,
-        recordLookups: [],
-        recordRollbacks: undefined,
-        recordUpdates: [],
+        // runInMode: undefined,
+        // sourceTemplate: undefined,
         start: undefined,
-        // startElementReference?: undefined,
+        // startElementReference: undefined,
         status: undefined,
-        variables: [],
-        actionCalls: [],
+        // actionCalls: [],
         apexPluginCalls: [],
         assignments: [],
         choices: [],
         constants: [],
+        decisions: [],
         dynamicChoiceSets: [],
         formulas: [],
         loops: [],
         recordCreates: [],
         recordDeletes: [],
+        recordLookups: [],
+        // recordRollbacks: undefined,
+        recordUpdates: [],
         screens: [],
         stages: [],
         steps: [],
         subflows: [],
         textTemplates: [],
+        variables: [],
         waits: [],
     };
 }
 
 export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
     let prevProp: ts.PropertyDeclaration;
-    s.forEachChild(s1 => s1.forEachChild(c => {
-        switch (c.kind) {
+    s.forEachChild(s1 => s1.forEachChild(c1 => {
+        switch (c1.kind) {
             case sk.Decorator: {
-                const exp = (c as ts.Decorator).expression as ts.CallExpression;
+                const exp = (c1 as ts.Decorator).expression as ts.CallExpression;
                 const ident = exp.expression as ts.Identifier;
                 exp.arguments.forEach(arg => {
                     const expr = arg as ts.BinaryExpression;
@@ -137,8 +141,8 @@ export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
                         ? ''
                         : (expr.left as ts.Identifier).escapedText as string;
                     const argValue = arg.kind !== sk.BinaryExpression
-                        ? arg.getText()
-                        : expr.right.getText();
+                        ? (arg as ts.StringLiteral).text
+                        : (expr.right as ts.StringLiteral).text;
                     const argIdent = `${ident.escapedText as string}:${argName}`;
                     switch (argIdent) {
                         case 'api:': flow.apiVersion = argValue; break;
@@ -158,10 +162,10 @@ export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
             case sk.DefaultKeyword:
                 break;
             case sk.Identifier:
-                //console.log(sk[c.kind], c.getText(sourceFile));
+                //console.log(sk[c1.kind], c1.getText(src));
                 break;
             case sk.PropertyDeclaration: {
-                const prop = c as ts.PropertyDeclaration;
+                const prop = c1 as ts.PropertyDeclaration;
                 if (!prop.type) {
                     prevProp = prop;
                     break;
@@ -170,26 +174,66 @@ export function flowParse(flow: Flow, s: ts.Node, src: ts.SourceFile): void {
                 if (prop.modifiers?.find(x => x.kind === sk.ConstKeyword)) constantParse(flow, prop)
                 else if (typeName.startsWith('Choice')) choiceParse(flow, prop);
                 else if (typeName.startsWith('DynamicChoice')) dynamicChoiceSetParse(flow, prop);
-                else if (typeName.startsWith('TextTemplate')) textTemplateParse(flow, prop);
-                else if (typeName.startsWith('Stage')) stageParse(flow, prop);
+                else if (typeName === 'TextTemplate') textTemplateParse(flow, prop);
+                else if (typeName === 'Stage') stageParse(flow, prop);
                 else variableParse(flow, prop, prevProp);
                 prevProp = undefined;
                 break;
             }
             case sk.GetAccessor: {
-                const prop = c as ts.MethodDeclaration;
+                const prop = c1 as ts.MethodDeclaration;
                 formulaParse(flow, prop);
                 break;
             }
             case sk.MethodDeclaration: {
-                const method = c as ts.MethodDeclaration;
+                const method = c1 as ts.MethodDeclaration;
+                // eslint-disable-next-line complexity
+                startParse(flow, method, c2 => {
+                    const connector: Connector = undefined;
+                    switch (c2.kind) {
+                        case sk.FirstStatement: {
+                            const stmt = c2 as ts.VariableStatement;
+                            if (stmt.declarationList?.flags !== ts.NodeFlags.Const && stmt.declarationList.declarations.length !== 1) throw Error('Not sure NodeFlags/Length');
+                            const decl = stmt.declarationList.declarations[0];
+                            if (!decl.initializer) throw Error('Not sure initializer');
+                            const func = decl.initializer as ts.CallExpression;
+                            if (!func && func.kind !== sk.CallExpression) throw Error('no statement found');
+                            if (func.expression.kind !== sk.PropertyAccessExpression && (func.expression as ts.PropertyAccessExpression).expression.kind !== sk.ThisKeyword) throw Error('no statement found');
+                            const args = func.arguments;
+                            const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+                            const arg0text = (args[0] as ts.StringLiteral).text;
+                            if (funcName === 'query' && arg0text.startsWith('ACTION')) actionCallParse(flow, stmt, func, connector);
+                            else if (funcName === 'query' && arg0text.startsWith('APEX')) apexPluginCallParse(flow, stmt, func, connector);
+                            else if (funcName === 'query' && arg0text.startsWith('INSERT')) recordCreateParse(flow, stmt, func, connector);
+                            else if (funcName === 'query' && arg0text.startsWith('DELETE')) recordDeleteParse(flow, stmt, func, connector);
+                            else if (funcName === 'query' && arg0text.startsWith('SELECT')) recordLookupParse(flow, stmt, func, connector);
+                            else if (funcName === 'query' && arg0text.startsWith('UPDATE')) recordUpdateParse(flow, stmt, func, connector);
+                            else if (funcName === 'screen') screenParse(flow, stmt, func, connector);
+                            else if (funcName === 'subflow') subflowParse(flow, stmt, func, connector);
+                            else throw Error(`Unknown func '${funcName} ${arg0text}'`);
+                            // assignmentParse(flow, stmt);
+                            // recordRollbackParse(flow, stmt);
+                            break;
+                        }
+                        case sk.IfStatement: {
+                            const stmt = c2 as ts.IfStatement;
+                            decisionParse(flow, stmt, connector);
+                            //console.log(sk[c.kind], c.getText(src));
+                            break;
+                        }
+                        default:
+                            console.log(`!${sk[c2.kind]}`, c2.getText(src));
+                            break;
+                    }
+                });
                 break;
             }
             default:
-                console.log(`!${sk[c.kind]}`, c.getText(src));
+                console.log(`!${sk[c1.kind]}`, c1.getText(src));
                 break;
         }
     }));
+    // console.log(flow);
 }
 
 /* eslint-disable complexity */
@@ -217,6 +261,7 @@ export function flowBuild(s: Flow): ts.Node {
         ['e', 'recordLookups', recordLookupBuild],
         ['e', 'recordRollbacks', recordRollbackBuild],
         ['e', 'recordUpdates', recordUpdateBuild],
+        ['e', 'recordDeletes', recordDeleteBuild],
         ['e', 'screens', screenBuild],
         ['-', 'start', startBuild],
         ['e', 'subflows', subflowBuild]
@@ -244,23 +289,23 @@ export function flowBuild(s: Flow): ts.Node {
     const flowArgs: ts.Expression[] = [sf.createStringLiteral(s.label, true)];
     if (s.interviewLabel !== s.label + LabelPrefix) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('interviewLabel'), sk.EqualsToken, sf.createStringLiteral(s.interviewLabel, true)));
     if (s.description) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('description'), sk.EqualsToken, sf.createStringLiteral(s.description, true)));
-    // if (s.runInMode) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('runInMode'), sk.EqualsToken, sf.createStringLiteral(s.runInMode, true)));
+    if (s.runInMode) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('runInMode'), sk.EqualsToken, sf.createStringLiteral(s.runInMode, true)));
     decorators.push(sf.createDecorator(sf.createCallExpression(sf.createIdentifier('flow'), undefined, flowArgs)));
 
     // @souceTemplate
     if (s.sourceTemplate) decorators.push(sf.createDecorator(sf.createCallExpression(sf.createIdentifier('sourceTemplate'), undefined, [sf.createStringLiteral(s.sourceTemplate, true)])));
 
     // #resources
-    // resources.forEach(x => {
-    //     members.push(x.build(x) as ts.ClassElement);
-    // });
+    resources.forEach(x => {
+        members.push(x.build(x) as ts.ClassElement);
+    });
 
     // #methods
     const ctx = new Context(elements as object);
     let connector = s.start?.connector ?? { targetReference: s.startElementReference } as Connector;
     let processType = s.processType;
     do {
-        const block = ctx.buildBlock(connector, true);
+        const block = ctx.buildBlock(connector);
         members.push(s.start.build(s.start, processType, block) as ts.ClassElement);
         connector = ctx.moveNext();
         ctx.stmts.length = 0;
