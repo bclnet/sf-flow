@@ -1,3 +1,4 @@
+/* eslint-disable spaced-comment */
 import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
@@ -20,7 +21,7 @@ export enum Operator {
 }
 
 export function operatorFromString(s: string): [Operator, string, Value] {
-    const [left, op, right] = s.split(' ', 3);
+    const [left, op, ...rest] = s.split(' '); const right = rest.join(' ');
     switch (op) {
         case '!==': return [Operator.DoesNotEqual, left, valueFromString(right)];
         case '=': return [Operator.EqualTo, left, valueFromString(right)];
@@ -145,6 +146,7 @@ export function conditionToExpression(s: Condition): ts.Expression {
 export interface RecordFilter {
     field: string;
     operator: Operator;
+    processMetadataValues: ProcessMetadataValue[];
     value: Value;
 }
 
@@ -153,8 +155,9 @@ export function recordFilterFromString(s: string): RecordFilter {
     return {
         field,
         operator,
+        processMetadataValues: [],
         value
-    } as RecordFilter;
+    };
 }
 
 export function recordFilterToString(s: RecordFilter): string {
@@ -162,7 +165,7 @@ export function recordFilterToString(s: RecordFilter): string {
 }
 
 export function filterFromQuery(s: string): [string, RecordFilter[]] {
-    if (!s) return [null, undefined];
+    if (!s) return [undefined, undefined];
     const where = s.startsWith('#') ? [s.substring(s.indexOf('; ') + 2), s.substring(1, s.indexOf('; '))] : [s, undefined];
     const seperator = s.startsWith('#') ? '; '
         : s.includes('=') && s.includes(' And ') ? ' And '
@@ -177,6 +180,7 @@ export function filterFromQuery(s: string): [string, RecordFilter[]] {
 }
 
 export function filterToQuery(filterLogic: string, filters: RecordFilter[]): string {
+    if (!filterLogic) return undefined;
     const where = filters.map(x => recordFilterToString(x)).join('\0');
     switch (filterLogic) {
         case null: break;

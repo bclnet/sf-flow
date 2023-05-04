@@ -2,6 +2,7 @@ import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages, AuthInfo, Connection } from '@salesforce/core';
 import * as fs from 'fs-extra';
 import { jsonStringify } from '../../../utils';
+import { flowSort } from '../../../types/flow';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.load('sf-flow', 'flow.json.retrieve', [
@@ -43,6 +44,7 @@ export default class FlowJsonRetrieve extends SfCommand<FlowJsonRetrieveResult> 
         const conn = await Connection.create({ authInfo });
         conn.setApiVersion(flags.apiversion);
         const flow = await conn.metadata.read('Flow', flags.path);
+        flowSort(flow);
 
         if (!flow.fullName) {
             this.spinner.stop('failed.');

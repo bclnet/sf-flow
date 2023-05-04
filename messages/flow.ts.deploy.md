@@ -16,11 +16,17 @@ The file of the flow you want displayed.
 # flags.outdir.summary
 output directory.
 
+# flags.jsondir.summary
+json output directory.
+
 # flags.locale.summary
 locale of the document (en or ja).
 
 # flags.nospinner.summary
 specify if you want to hide spinner.
+
+# flags.debug.summary
+specify if you want debug information.
 
 # error.paramNotFound
 Flow API name is missing.

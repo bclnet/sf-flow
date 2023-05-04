@@ -4,15 +4,13 @@ export function toArray<T = any>(elements): Array<T> {
 }
 
 export function jsonStringify(obj: object, space: string): string {
-    //JSON.stringify(flow, Object.keys(flow).sort(), '  ')
     const allKeys = new Set();
     JSON.stringify(obj, (key, value) => (allKeys.add(key), value));
     return JSON.stringify(obj, Array.from(allKeys).sort(), space);
 }
 
-export function unescapeHtml(target) {
+export function unescapeHtml(target: unknown): unknown {
     if (typeof target !== 'string') return target;
-
     const patterns = {
         '&lt;': '<',
         '&gt;': '>',
@@ -22,10 +20,7 @@ export function unescapeHtml(target) {
         '&#x27;': "'",
         '&#x60;': '`',
     };
-
-    return target.replace(/&(lt|gt|amp|quot|#x27|#x60);/g, function (match) {
-        return patterns[match];
-    });
+    return target.replace(/&(lt|gt|amp|quot|#x27|#x60);/g, (match) => patterns[match] as string);
 }
 
 export function objectPurge(s: object): object {

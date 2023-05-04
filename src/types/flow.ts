@@ -1,3 +1,4 @@
+/* eslint-disable spaced-comment */
 /* eslint-disable @typescript-eslint/ban-types */
 import * as ts from 'typescript';
 const sf = ts.factory;
@@ -5,9 +6,9 @@ const sk = ts.SyntaxKind;
 // https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
 import { toArray } from '../utils';
 import {
-    buildLeadingComment,
+    parseLeadingComment, buildLeadingComment,
     Context,
-    Connector,
+    Connectorable, Connector, connectorCreate,
     ProcessMetadataValue,
     Step, stepParse, stepBuild,
     Wait, waitParse, waitBuild
@@ -37,7 +38,24 @@ import {
     TextTemplate, textTemplateParse, textTemplateBuild,
     Variable, variableParse, variableBuild
 } from './flowResources';
-const LabelPrefix = ' {!$Flow.CurrentDateTime}';
+export const FlowLabelPrefix = ' {!$Flow.CurrentDateTime}';
+
+//#region Debug
+
+export class Debug {
+    private level: number;
+    public constructor() { this.level = 0; }
+    public push(): void { this.level++; }
+    public pop(): void { this.level--; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    public log(...msg: any[]): void {
+        msg[0] = `${'  '.repeat(this.level)}${msg[0] as string}`;
+        // eslint-disable-next-line no-console, @typescript-eslint/no-unsafe-argument
+        console.log(...msg);
+    }
+}
+
+//#endregion
 
 //#region Flow - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_assignment.htm&type=5
 
@@ -67,7 +85,7 @@ export interface Flow {
     start: Start;
     startElementReference?: string;
     status: string;
-    actionCalls?: ActionCall[];
+    actionCalls: ActionCall[];
     apexPluginCalls: ApexPluginCall[];
     assignments: Assignment[];
     choices: Choice[];
@@ -100,10 +118,10 @@ export function flowCreate(): Flow {
         label: undefined,
         processMetadataValues: [],
         processType: undefined,
-        // runInMode: undefined,
-        // sourceTemplate: undefined,
+        runInMode: undefined,
+        sourceTemplate: undefined,
         start: undefined,
-        // startElementReference: undefined,
+        startElementReference: undefined,
         status: undefined,
         actionCalls: [],
         apexPluginCalls: [],
@@ -117,7 +135,7 @@ export function flowCreate(): Flow {
         recordCreates: [],
         recordDeletes: [],
         recordLookups: [],
-        // recordRollbacks: undefined,
+        recordRollbacks: undefined,
         recordUpdates: [],
         screens: [],
         stages: [],
@@ -129,81 +147,113 @@ export function flowCreate(): Flow {
     };
 }
 
-export function flowParse(flow: Flow, s: ts.Node): void {
+export function flowSort(f: Flow): void {
+    for (const field of [
+        'steps',
+        'waits',
+        'actionCalls',
+        'apexPluginCalls',
+        'assignments',
+        'decisions',
+        'loops',
+        'recordCreates',
+        'recordLookups',
+        'recordUpdates',
+        'recordDeletes',
+        'screens',
+        'subflows']
+    ) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+        if (f[field]) f[field].sort((a: Element, b: Element) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    }
+}
+
+export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
     let prevProp: ts.PropertyDeclaration;
-    s.forEachChild(s1 => s1.forEachChild(c1 => {
-        switch (c1.kind) {
-            case sk.Decorator: {
-                const exp = (c1 as ts.Decorator).expression as ts.CallExpression;
-                const ident = exp.expression as ts.Identifier;
-                exp.arguments.forEach(arg => {
-                    const expr = arg as ts.BinaryExpression;
-                    const argName = arg.kind !== sk.BinaryExpression
-                        ? ''
-                        : (expr.left as ts.Identifier).escapedText as string;
-                    const argValue = arg.kind !== sk.BinaryExpression
-                        ? (arg as ts.StringLiteral).text
-                        : (expr.right as ts.StringLiteral).text;
-                    const argIdent = `${ident.escapedText as string}:${argName}`;
-                    switch (argIdent) {
-                        case 'flow:': flow.apiVersion = argValue; break;
-                        case 'flow:runInMode': flow.runInMode = argValue as FlowRunInMode; break;
-                        case 'flow:status': flow.status = argValue; break;
-                        case 'flow:environments': flow.environments = argValue; break;
-                        case 'flow:interviewLabel': flow.interviewLabel = argValue; break;
-                        case 'sourceTemplate:': flow.sourceTemplate = argValue; break;
-                        default: throw Error(`Unknown Decorator '${argIdent}'`);
-                    }
-                });
-                break;
-            }
-            case sk.ExportKeyword:
-            case sk.DefaultKeyword:
-                break;
-            case sk.Identifier:
-                //console.log(sk[c1.kind], c1.getText(s.getSourceFile()));
-                break;
-            case sk.PropertyDeclaration: {
-                const prop = c1 as ts.PropertyDeclaration;
-                if (!prop.type) {
-                    prevProp = prop;
+    s.forEachChild(s1 => {
+        if (s1.kind === sk.ClassDeclaration) {
+            debug?.log('parse', sk[s1.kind]);
+            const klass = s1 as ts.ClassDeclaration;
+            const [interviewLabel, , description, processMetadataValues] = parseLeadingComment(klass);
+            f.fullName = klass.name?.text;
+            f.status = 'Active';
+            f.label = undefined;
+            f.interviewLabel = interviewLabel;
+            f.description = description;
+            f.processMetadataValues = processMetadataValues;
+        }
+        s1.forEachChild(c1 => {
+            debug?.log('parse', sk[c1.kind]);
+            switch (c1.kind) {
+                case sk.Decorator: {
+                    const exp = (c1 as ts.Decorator).expression as ts.CallExpression;
+                    const ident = exp.expression as ts.Identifier;
+                    exp.arguments.forEach(arg => {
+                        const expr = arg as ts.BinaryExpression;
+                        const argName = arg.kind !== sk.BinaryExpression
+                            ? ''
+                            : (expr.left as ts.Identifier).escapedText as string;
+                        const argValue = arg.kind !== sk.BinaryExpression
+                            ? (arg as ts.StringLiteral).text
+                            : (expr.right as ts.StringLiteral).text;
+                        const argIdent = `${ident.escapedText as string}:${argName}`;
+                        switch (argIdent) {
+                            case 'flow:': f.apiVersion = argValue; break;
+                            case 'flow:runInMode': f.runInMode = argValue as FlowRunInMode; break;
+                            case 'flow:status': f.status = argValue; break;
+                            case 'flow:environments': f.environments = argValue; break;
+                            case 'flow:interviewLabel': f.interviewLabel = argValue; break;
+                            case 'sourceTemplate:': f.sourceTemplate = argValue; break;
+                            default: throw Error(`Unknown Decorator '${argIdent}'`);
+                        }
+                    });
                     break;
                 }
-                const typeName = prop.type.getText();
-                if (prop.modifiers?.find(x => x.kind === sk.ConstKeyword)) constantParse(flow, prop)
-                else if (typeName.startsWith('Choice')) choiceParse(flow, prop);
-                else if (typeName.startsWith('DynamicChoice')) dynamicChoiceSetParse(flow, prop);
-                else if (typeName === 'TextTemplate') textTemplateParse(flow, prop);
-                else if (typeName === 'Stage') stageParse(flow, prop);
-                else variableParse(flow, prop, prevProp);
-                prevProp = undefined;
-                break;
+                case sk.ExportKeyword:
+                case sk.DefaultKeyword:
+                case sk.Identifier:
+                    break;
+                case sk.PropertyDeclaration: {
+                    const prop = c1 as ts.PropertyDeclaration;
+                    if (!prop.type) {
+                        prevProp = prop;
+                        break;
+                    }
+                    const typeName = prop.type.getText();
+                    if (prop.modifiers?.find(x => x.kind === sk.ConstKeyword)) constantParse(debug, f, prop)
+                    else if (typeName.startsWith('Choice')) choiceParse(debug, f, prop);
+                    else if (typeName.startsWith('DynamicChoice')) dynamicChoiceSetParse(debug, f, prop);
+                    else if (typeName === 'TextTemplate') textTemplateParse(debug, f, prop);
+                    else if (typeName === 'Stage') stageParse(debug, f, prop);
+                    else variableParse(debug, f, prop, prevProp);
+                    prevProp = undefined;
+                    break;
+                }
+                case sk.GetAccessor: {
+                    const prop = c1 as ts.MethodDeclaration;
+                    formulaParse(debug, f, prop);
+                    break;
+                }
+                case sk.MethodDeclaration: {
+                    const method = c1 as ts.MethodDeclaration;
+                    startParse(debug, f, method);
+                    break;
+                }
+                // eslint-disable-next-line no-console
+                default: console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile())); break;
             }
-            case sk.GetAccessor: {
-                const prop = c1 as ts.MethodDeclaration;
-                formulaParse(flow, prop);
-                break;
-            }
-            case sk.MethodDeclaration: {
-                const method = c1 as ts.MethodDeclaration;
-                // eslint-disable-next-line complexity
-                startParse(flow, method);
-                break;
-            }
-            default:
-                console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile()));
-                break;
-        }
-    }));
+        });
+    });
     // console.log(flow);
 }
 
-export function flowParseBlock(flow: Flow, s: ts.Node): void {
+export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connect: [Connectorable, string]): void {
     if (!s) return;
-    const connector: Connector = undefined;
+    debug.push();
+    let nextConnect: [Connectorable, string];
     // eslint-disable-next-line complexity
     s.forEachChild(c1 => {
-        // console.log(sk[c1.kind]);
+        // debug?.log('parse', sk[c1.kind]);
         switch (c1.kind) {
             case sk.FirstStatement: {
                 const stmt = c1 as ts.VariableStatement;
@@ -215,35 +265,57 @@ export function flowParseBlock(flow: Flow, s: ts.Node): void {
                 if (func.expression.kind !== sk.PropertyAccessExpression && (func.expression as ts.PropertyAccessExpression).expression.kind !== sk.ThisKeyword) throw Error('no statement found');
                 const args = func.arguments;
                 const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-                const arg0text = (args[0] as ts.StringLiteral).text;
-                if (funcName === 'query' && arg0text.startsWith('ACTION')) actionCallParse(flow, stmt, func, connector);
-                else if (funcName === 'query' && arg0text.startsWith('APEX')) apexPluginCallParse(flow, stmt, func, connector);
-                else if (funcName === 'query' && arg0text.startsWith('INSERT')) recordCreateParse(flow, stmt, func, connector);
-                else if (funcName === 'query' && arg0text.startsWith('DELETE')) recordDeleteParse(flow, stmt, func, connector);
-                else if (funcName === 'query' && arg0text.startsWith('SELECT')) recordLookupParse(flow, stmt, func, connector);
-                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) recordUpdateParse(flow, stmt, func, connector);
-                else if (funcName === 'screen') screenParse(flow, stmt, func, connector);
-                else if (funcName === 'subflow') subflowParse(flow, stmt, func, connector);
+                const arg0text = args.length > 0 ? (args[0] as ts.StringLiteral).text : undefined;
+                debug?.log('parse', funcName, arg0text ? arg0text.substring(0, 6) : '');
+                if (funcName === 'query' && arg0text.startsWith('ACTION')) nextConnect = actionCallParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('APEX')) nextConnect = apexPluginCallParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('INSERT')) nextConnect = recordCreateParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('DELETE')) nextConnect = recordDeleteParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('SELECT')) nextConnect = recordLookupParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) nextConnect = recordUpdateParse(debug, flow, stmt, func);
+                else if (funcName === 'set') nextConnect = assignmentParse(debug, flow, stmt, func);
+                else if (funcName === 'screen') nextConnect = screenParse(debug, flow, stmt, func);
+                else if (funcName === 'subflow') nextConnect = subflowParse(debug, flow, stmt, func);
+                else if (funcName === 'rollback') nextConnect = recordRollbackParse(debug, flow, stmt, func);
                 else throw Error(`Unknown func '${funcName} ${arg0text}'`);
-                // assignmentParse(flow, stmt);
-                // recordRollbackParse(flow, stmt);
                 break;
             }
             case sk.IfStatement: {
                 const stmt = c1 as ts.IfStatement;
-                decisionParse(flow, stmt, connector);
-                //console.log(sk[c1.kind], c.getText(s.getSourceFile()));
+                debug?.log('parse', 'decisionParse');
+                nextConnect = decisionParse(debug, flow, stmt);
                 break;
             }
-            default:
-                console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile()));
+            case sk.ForInStatement: {
+                const stmt = c1 as ts.ForInStatement;
+                debug?.log('parse', 'loopParse');
+                nextConnect = loopParse(debug, flow, stmt);
                 break;
+            }
+            case sk.BreakStatement: {
+                const stmt = c1 as ts.BreakStatement;
+                debug?.log('parse', 'break', stmt.label.text);
+                nextConnect = [{ name: stmt.label.text }, undefined];
+                break;
+            }
+            // eslint-disable-next-line no-console
+            default: console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile())); break;
         }
+        // assign block
+        if (connect && nextConnect) {
+            const [obj, field] = connect;
+            const targetReference = nextConnect[0].name;
+            debug?.log('assgn', `${obj.name}.${field} = '${targetReference}'`);
+            obj[field] = connectorCreate(targetReference);
+        }
+        connect = nextConnect;
+        nextConnect = undefined;
     });
+    debug.pop();
 }
 
 /* eslint-disable complexity */
-export function flowBuild(s: Flow): ts.Node {
+export function flowBuild(debug: Debug, s: Flow): ts.Node {
     const resources: Resource[] = []; const elements = {};
     const decorators: ts.Decorator[] = []; const members: ts.ClassElement[] = [];
 
@@ -258,7 +330,8 @@ export function flowBuild(s: Flow): ts.Node {
         ['r', 'stages', stageBuild],
         ['r', 'textTemplates', textTemplateBuild],
         ['r', 'variables', variableBuild],
-        ['e', 'actionCalls', actionCallBuild], ['e', 'apexPluginCalls', apexPluginCallBuild],
+        ['e', 'actionCalls', actionCallBuild],
+        ['e', 'apexPluginCalls', apexPluginCallBuild],
         ['e', 'assignments', assignmentBuild],
         ['e', 'decisions', decisionBuild],
         ['e', 'loops', loopBuild],
@@ -286,7 +359,6 @@ export function flowBuild(s: Flow): ts.Node {
 
     // @flow
     const flowArgs: ts.Expression[] = [sf.createStringLiteral(s.apiVersion, true)];
-    // if (s.interviewLabel !== s.label + LabelPrefix) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('interviewLabel'), sk.EqualsToken, sf.createStringLiteral(s.interviewLabel, true)));
     if (s.runInMode) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('runInMode'), sk.EqualsToken, sf.createStringLiteral(s.runInMode, true)));
     if (s.status !== 'Active') flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('status'), sk.EqualsToken, sf.createStringLiteral(s.status, true)));
     if (s.environments) flowArgs.push(sf.createBinaryExpression(sf.createIdentifier('environments'), sk.EqualsToken, sf.createStringLiteral(s.environments, true)));
@@ -297,7 +369,7 @@ export function flowBuild(s: Flow): ts.Node {
 
     // #resources
     resources.forEach(x => {
-        members.push(x.build(x) as ts.ClassElement);
+        members.push(x.build(debug, x));
     });
 
     // #methods
@@ -305,8 +377,8 @@ export function flowBuild(s: Flow): ts.Node {
     let connector = s.start?.connector ?? { targetReference: s.startElementReference } as Connector;
     let processType = s.processType;
     do {
-        const block = ctx.buildBlock(connector);
-        members.push(s.start.build(s.start, processType, block) as ts.ClassElement);
+        const block = ctx.buildBlock(debug, connector);
+        members.push(s.start.build(debug, s, s.start, processType, block));
         connector = ctx.moveNext();
         ctx.stmts.length = 0;
         processType = FlowProcessType.Orphan;
@@ -319,7 +391,7 @@ export function flowBuild(s: Flow): ts.Node {
         /*typeParameters*/undefined,
         /*heritageClauses*/undefined,
         /*members*/members);
-    buildLeadingComment(decl, s.label, s.interviewLabel, s.description, s.processMetadataValues);
+    buildLeadingComment(decl, s.interviewLabel !== (s.label + FlowLabelPrefix) ? s.interviewLabel : undefined, undefined, s.description, s.processMetadataValues);
     return decl;
 }
 

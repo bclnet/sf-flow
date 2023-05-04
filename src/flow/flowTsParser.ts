@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { Flow, flowCreate, flowParse } from '../types/flow';
+import { Flow, Debug, flowCreate, flowParse } from '../types/flow';
 
 export default class FlowTsBuilder {
     private readonly data: string;
@@ -12,11 +12,11 @@ export default class FlowTsBuilder {
 
     public isSupported(): boolean { return this.data ? true : false; }
 
-    public toFlow(): Flow {
+    public toFlow(debug: boolean): Flow {
         const sourceFile = ts.createSourceFile(this.dataPath, this.data, ts.ScriptTarget.ES2015, /*setParentNodes */true);
-        //this.printRecursiveFrom(sourceFile, 0, sourceFile);
+        // this.printRecursiveFrom(sourceFile, 0, sourceFile);
         const flow = flowCreate();
-        flowParse(flow, sourceFile);
+        flowParse(debug ? new Debug() : undefined, flow, sourceFile);
         return flow;
     }
 
@@ -24,6 +24,7 @@ export default class FlowTsBuilder {
         const indentation = '    '.repeat(indentLevel);
         const syntaxKind = ts.SyntaxKind[node.kind];
         const nodeText = node.getText(sourceFile);
+        // eslint-disable-next-line no-console
         console.log(`${indentation}${syntaxKind}: ${nodeText}`);
         node.forEachChild(child =>
             this.printRecursiveFrom(child, indentLevel + 1, sourceFile)

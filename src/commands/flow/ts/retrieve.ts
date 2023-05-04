@@ -17,6 +17,7 @@ const messages = Messages.load('sf-flow', 'flow.ts.retrieve', [
     'flags.indir.summary',
     'flags.outdir.summary',
     'flags.nospinner.summary',
+    'flags.debug.summary',
     'error.paramNotFound',
     'error.flowNotFound',
     'error.unsupportedFlow',
@@ -36,6 +37,7 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
         indir: Flags.string({ summary: messages.getMessage('flags.indir.summary'), char: 'i' }),
         outdir: Flags.string({ summary: messages.getMessage('flags.outdir.summary'), char: 'o' }),
         nospinner: Flags.boolean({ summary: messages.getMessage('flags.nospinner.summary') }),
+        debug: Flags.boolean({ summary: messages.getMessage('flags.debug.summary'), char: 'd', default: true }),
     };
 
     public async run(): Promise<FlowTsRetrieveResult> {
@@ -51,7 +53,8 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
             const sourcePath = `${flags.path}.json`;
             // const indir = flags.indir ? flags.indir : '.';
             const indir = './files.json';
-            flow = JSON.parse(fs.readFileSync(`${indir}/${sourcePath}`, { encoding: 'utf8', flag: 'r' })) as Flow;
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+            flow = JSON.parse(fs.readFileSync(`${indir}/${sourcePath}`, { encoding: 'utf8', flag: 'r' }) as string) as Flow;
         } else {
             const authInfo = await AuthInfo.create({ username: flags.username });
             const conn = await Connection.create({ authInfo });
@@ -71,16 +74,15 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
         this.spinner.stop();
 
         const targetPath = `${flags.path}.ts`;
-        const data = fb.toTypescript(targetPath);
-        //this.log(data);
+        const data = fb.toTypescript(flags.debug, targetPath);
 
         const outdir = flags.outdir ? flags.outdir : '.';
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         await fs.ensureDir(outdir);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         fs.writeFileSync(`${outdir}/${targetPath}`, data);
 
         const label: string = flow.label;
         this.log(`'${label}' flow retrieved.`);
     }
 }
-
-//cls & bin\dev flow:ts:retrieve -u sky.morey@merklecxm.com1.dev01 -p Approve_Order_Summary -o files.ts

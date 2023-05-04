@@ -1,8 +1,10 @@
+/* eslint-disable spaced-comment */
 import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
 type RequireOne<T, K extends keyof T = keyof T> = K extends keyof T ? PartialRequire<T, K> : never;
 type PartialRequire<O, K extends keyof O> = { [P in K]-?: O[P]; } & O;
+import { Debug } from './flow';
 import { Element } from './flowElements';
 
 export function createStringLiteralX(s: string): ts.StringLiteral {
@@ -19,9 +21,10 @@ export function getLeadingComments(s: ts.Node): string[] {
 }
 
 export function getTrailingComments(s: ts.Node): string[] {
-    const ranges = ts.getTrailingCommentRanges(s.getFullText(), 0)
+    const src = s.getSourceFile().getFullText();
+    const ranges = ts.getTrailingCommentRanges(src, s.end)
     return ranges
-        ? ranges.map(r => s.getFullText().slice(r.pos + 2, r.end).trim())
+        ? ranges.map(r => src.slice(r.pos + 2, r.end).trim())
         : undefined;
 }
 
@@ -42,26 +45,50 @@ export function buildLocation(name: string, locationX: number, locationY: number
 }
 
 export function parseLeadingComment(s: ts.Node): [string, string, string, ProcessMetadataValue[]] {
+    function parseProcessMetadataValue(k: string): ProcessMetadataValue {
+        const [name, ...rest] = k.substring(6).split(' = '); const value = rest.join(' = ');
+        return {
+            name,
+            value: value ? valueFromString(value) : undefined,
+        };
+    }
     const c = getLeadingComments(s);
-    if (!c || c.length < 1 || c.length > 2) return [undefined, undefined, undefined, []];
-    const description = c.length > 1 ? c[0].trim() : undefined;
-    const values = c[c.length - 1].replace(']', '').split('[', 2);
-    return [values[0].trim(), values.length > 1 ? values[1].trim() : undefined, description, []];
+    if (!c || c.length === 0) return [undefined, undefined, undefined, []];
+    const processMetadataValues = c.filter(x => x.startsWith('meta:')).map(x => parseProcessMetadataValue(x));
+    const values = c.filter(x => !x.startsWith('meta:'));
+    const description = values.length > 1 ? values[0].trim() : undefined;
+    const labelLocation = values[values.length - 1].replace(']', '').split('[', 2);
+    return [labelLocation[0].trim(), labelLocation.length > 1 ? labelLocation[1].trim() : undefined, description, processMetadataValues];
 }
 
-export function buildLeadingComment(s: ts.Statement, label: string, location: string, description: string, processMetadataValues: ProcessMetadataValue[]): void {
+export function buildLeadingComment(s: ts.Node, label: string, location: string, description: string, processMetadataValues: ProcessMetadataValue[]): void {
+    function buildProcessMetadataValue(k: ProcessMetadataValue): string {
+        return `meta: ${k.name}${k.value ? ` = ${valueToString(k.value)}` : ''}`;
+    }
     if (description) ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, ` ${description}`, true);
-    ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, ` ${label}${location ? ` [${location}]` : ''}`, true);
+    ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, `${label ? ` ${label}` : ''}${location ? ` [${location}]` : ''}`, true);
     if (processMetadataValues) processMetadataValues.forEach(v => {
-        ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, ` meta: ${v.name}${v.value ? ` = ${valueToString(v.value)}` : ''}`, true);
+        ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, ` ${buildProcessMetadataValue(v)}`, true);
     });
+}
+
+export function parseTrailingComment(s: ts.Node): [string, string] {
+    const c = getTrailingComments(s);
+    if (!c || c.length === 0) return [undefined, undefined];
+    const values = c.filter(x => !x.startsWith('meta:'));
+    const labelLocation = values[values.length - 1].replace(']', '').split('[', 2);
+    return [labelLocation[0].trim(), labelLocation.length > 1 ? labelLocation[1].trim() : undefined];
+}
+
+export function buildTrailingComment(s: ts.Node, label: string, location: string): void {
+    ts.addSyntheticTrailingComment(s, sk.SingleLineCommentTrivia, `${label ? ` ${label}` : ''}${location ? ` [${location}]` : ''}`, true);
 }
 
 //#endregion
 
 //#region Query
 
-export function genericFromQuery(s: string, queryName: string, actionName: string): [string, string, string, string, string] {
+export function genericFromQuery(s: string, queryName: string, actionName: string): [query: string, action: string, from: string, where: string, limit: string] {
     const endx = s.length; const queryl = queryName.length + 1; const actionl = actionName.length + 1;
     let queryx = s.indexOf(`${queryName} `); if (queryx === -1) throw Error(`missing ${queryName}`); queryx += queryl;
     let actionx = s.indexOf(`${actionName} `, queryx); if (actionx === -1) actionx = queryx; else actionx += actionl;
@@ -69,8 +96,8 @@ export function genericFromQuery(s: string, queryName: string, actionName: strin
     let wherex = s.indexOf('WHERE ', fromx); if (wherex === -1) wherex = fromx; else wherex += 6;
     let limitx = s.indexOf('LIMIT ', wherex); if (limitx === -1) limitx = endx; else limitx += 6;
     const query = s.substring(queryx, queryx === actionx ? fromx - 6 : actionx - actionl - 1);
-    const action = queryx === actionx ? null : s.substring(actionx, actionx === fromx ? wherex - 7 : fromx - 6);
-    const from = fromx === actionx ? null : s.substring(fromx, fromx === wherex ? limitx - 7 : wherex - 7);
+    const action = queryx === actionx ? null : s.substring(actionx, actionx === fromx ? actionx === wherex ? limitx === endx ? endx : wherex - 7 : wherex - 7 : fromx - 6);
+    const from = fromx === actionx ? null : s.substring(fromx, fromx === wherex ? limitx === endx ? endx : limitx - 7 : wherex - 7);
     const where = wherex === fromx ? null : s.substring(wherex, endx === limitx ? endx : limitx - 7);
     const limit = limitx === endx ? null : s.substring(limitx, endx);
     // console.log(s);
@@ -111,6 +138,7 @@ export class Context {
     }
 
     public static parseTargetStatement(s: ts.Statement, useBreak?: boolean): Connector {
+        throw Error('parseTargetStatement');
         return undefined; // useBreak ?? true ? sf.createBreakStatement(s.targetReference) : sf.createContinueStatement(s.targetReference);
     }
 
@@ -118,7 +146,8 @@ export class Context {
         return useBreak ?? true ? sf.createBreakStatement(s.targetReference) : sf.createContinueStatement(s.targetReference);
     }
 
-    public static parseTargetFaultArgument(s: ts.Statement, useBreak?: boolean): Connector {
+    public static parseTargetFaultArgument(s: ts.Expression, useBreak?: boolean): Connector {
+        throw Error('parseTargetFaultArgument');
         return undefined; // sf.createArrowFunction(undefined, undefined, [], undefined, undefined, sf.createBlock([Context.buildTargetStatement(s, useBreak)], false));
     }
 
@@ -141,28 +170,30 @@ export class Context {
         else if (!this.hasRemain(s)) return 1;
         const ref = this.remain[s.targetReference] as Element;
         if (!ref) throw Error(`Unknown targetReference '${s.targetReference}`);
-        return 1 + (ref.build(ref, this) as number);
+        return 1 + (ref.build(undefined, ref, this) as number);
     }
 
-    public build(s: Connector): ts.ClassElement {
+    public build(debug: Debug, s: Connector): ts.ClassElement {
         this.counting = false;
         if (!s) return;
-        else if (!this.hasRemain(s)) { /*this.stmts.push(Context.targetStatement(s));*/ return; }
+        else if (!this.hasRemain(s)) throw Error(`exists '${s.targetReference}'`); //{ /*this.stmts.push(Context.targetStatement(s));*/ return; }
         const ref = this.remain[s.targetReference] as Element;
         if (!ref) throw Error(`Unknown targetReference '${s.targetReference}`);
-        //console.log(ref.name, ref.build);
+        debug?.log('build', ref.build.name.substring(0, ref.build.name.length - 5), ref.name);
         this.visted[s.targetReference] = ref;
         delete this.remain[s.targetReference];
-        ref.build(ref, this);
+        ref.build(debug, ref, this);
         return undefined;
     }
 
-    public buildBlock(s: Connector): ts.Statement {
+    public buildBlock(debug: Debug, s: Connector): ts.Statement {
         if (!s) return;
         else if (!this.hasRemain(s)) { return sf.createBlock([Context.buildTargetStatement(s)], false); }
         const lastStmts = this.stmts;
         this.stmts = [];
-        this.build(s);
+        debug?.push();
+        this.build(debug, s);
+        debug?.pop();
         const block = sf.createBlock(this.stmts, true);
         this.stmts = lastStmts;
         return block;
@@ -181,10 +212,21 @@ export class Context {
 
 //#region Connector
 
+export interface Connectorable {
+    name: string;
+}
+
 export interface Connector {
     isGoTo?: boolean;
     targetReference: string;
     processMetadataValues: ProcessMetadataValue[];
+}
+
+export function connectorCreate(targetReference: string): Connector {
+    return {
+        targetReference,
+        processMetadataValues: [],
+    };
 }
 
 //#endregion
@@ -250,12 +292,13 @@ export function valueToTypeNode(isCollection: boolean, dataType: DataType, scale
 
 export function valueFromExpression(s: ts.Expression, dataType?: DataType): Value {
     if (!dataType) {
-        if (s.kind === sk.TrueKeyword || s.kind === sk.FalseKeyword) return { booleanValue: s.kind === sk.TrueKeyword };
+        if (s.kind === sk.NullKeyword) return undefined;
+        else if (s.kind === sk.TrueKeyword || s.kind === sk.FalseKeyword) return { booleanValue: s.kind === sk.TrueKeyword };
         else if (s.kind === sk.StringLiteral) return { stringValue: (s as ts.StringLiteral).text };
-        // else if (s.startsWith(':')) return { elementReference: s.substring(1) };
-        else if (!isNaN(Number(s))) return { numberValue: Number(s) };
+        else if (s.kind === sk.Identifier || s.kind === sk.PropertyAccessExpression) return { elementReference: (s as ts.PropertyAccessExpression).getText() };
+        else if (s.kind === sk.FirstLiteralToken && !isNaN(Number(s.getText()))) return { numberValue: Number(s.getText()) };
         // else if (s.endsWith('Z')) return { dateValue: s.substring(0, s.length - 1) } as Value;
-        else throw Error('valueFromExpression: Unknown dataType');
+        else throw Error(`valueFromExpression: Unknown dataType ${sk[s.kind]}`);
     }
     switch (dataType) {
         case DataType.Boolean: return { booleanValue: s.kind === sk.TrueKeyword };
@@ -270,16 +313,18 @@ export function valueFromExpression(s: ts.Expression, dataType?: DataType): Valu
 }
 
 export function valueToExpression(s: Value): ts.Expression {
-    if ('booleanValue' in s) return s.booleanValue ? sf.createToken(sk.TrueKeyword) : sf.createToken(sk.FalseKeyword);
+    if (!s) return sf.createToken(sk.NullKeyword);
+    else if ('booleanValue' in s) return s.booleanValue ? sf.createToken(sk.TrueKeyword) : sf.createToken(sk.FalseKeyword);
     else if ('stringValue' in s) return sf.createStringLiteral(s.stringValue, true);
-    else if ('elementReference' in s) return sf.createStringLiteral(`:${s.elementReference}`, true);
+    else if ('elementReference' in s) return sf.createIdentifier(s.elementReference);
     else if ('numberValue' in s) return sf.createNumericLiteral(s.numberValue);
     else if ('dateValue' in s) return sf.createNumericLiteral(`${s.dateValue}Z`);
     else throw Error(`valueToExpression: Unknown dataType ${Object.keys(s)}`);
 }
 
 export function valueFromString(s: string): Value {
-    if (s === 'true' || s === 'false') return { booleanValue: Boolean(s) };
+    if (!s) return undefined;
+    else if (s === 'true' || s === 'false') return { booleanValue: Boolean(s) };
     else if (s.startsWith('\'')) return { stringValue: s.substring(1, s.length - 1) };
     else if (s.startsWith(':')) return { elementReference: s.substring(1) };
     else if (!isNaN(Number(s))) return { numberValue: Number(s) };
@@ -288,7 +333,8 @@ export function valueFromString(s: string): Value {
 }
 
 export function valueToString(s: Value): string {
-    if ('booleanValue' in s) return String(s.booleanValue);
+    if (!s) return undefined;
+    else if ('booleanValue' in s) return String(s.booleanValue);
     else if ('stringValue' in s) return `'${s.stringValue}'`;
     else if ('elementReference' in s) return `:${s.elementReference}`;
     else if ('numberValue' in s) return String(s.numberValue);
@@ -305,28 +351,23 @@ export interface ProcessMetadataValue {
     value?: Value;
 }
 
-// export function processMetadataValueParse(flow: Flow, s: ts.Node): void {
-// }
-
-// /* eslint-disable complexity */
-// export function processMetadataValueBuild(s: ProcessMetadataValue) {
-// }
-
 //#endregion
 
 //#region Input/Output
 
 export interface InputAssignment {
     field: string;
+    processMetadataValues: ProcessMetadataValue[];
     value: Value;
 }
 
 export function inputAssignmentFromString(s: string): InputAssignment {
-    const values = s.split(' = ', 2);
-    if (values.length !== 2) throw Error(`inputAssignmentFromString '${s}'`);
+    const [field, ...rest] = s.split(' = '); const value = rest.join(' = ');
+    if (!value) throw Error(`inputAssignmentFromString '${s}'`);
     return {
-        field: values[0],
-        value: valueFromString(values[1]),
+        field,
+        processMetadataValues: [],
+        value: valueFromString(value),
     };
 }
 
@@ -340,11 +381,11 @@ export interface OutputAssignment {
 }
 
 export function outputAssignmentFromString(s: string): OutputAssignment {
-    const values = s.split(' = ', 2);
-    if (values.length !== 2) throw Error(`outputAssignmentFromString '${s}'`);
+    const [assignToReference, ...rest] = s.split(' = '); const field = rest.join(' = ');
+    if (!field) throw Error(`outputAssignmentFromString '${s}'`);
     return {
-        assignToReference: values[0],
-        field: values[1],
+        assignToReference,
+        field,
     };
 }
 
@@ -354,12 +395,42 @@ export function outputAssignmentToString(s: OutputAssignment): string {
 
 export interface InputParameter {
     name: string;
+    processMetadataValues: ProcessMetadataValue[];
     value: Value;
+}
+
+export function inputParameterFromString(s: string): InputParameter {
+    const [name, ...rest] = s.split(' = '); const value = rest.join(' = ');
+    if (!value) throw Error(`inputParameterFromString '${s}'`);
+    return {
+        name,
+        processMetadataValues: [],
+        value: valueFromString(value),
+    };
+}
+
+export function inputParameterToString(s: InputParameter): string {
+    return `${s.name} = ${valueToString(s.value)}`;
 }
 
 export interface OutputParameter {
     assignToReference: string;
     name: string;
+    processMetadataValues: ProcessMetadataValue[];
+}
+
+export function outputParameterFromString(s: string): OutputParameter {
+    const [assignToReference, ...rest] = s.split(' = '); const name = rest.join(' = ');
+    if (!name) throw Error(`outputParameterFromString '${s}'`);
+    return {
+        assignToReference,
+        name,
+        processMetadataValues: [],
+    };
+}
+
+export function outputParameterToString(s: OutputParameter): string {
+    return `${s.assignToReference} = ${s.name}`;
 }
 
 //#endregion
@@ -370,10 +441,12 @@ export interface Step {
 }
 
 export function stepParse(s: ts.Node): Step {
+    throw Error('stepParse');
 }
 
 /* eslint-disable complexity */
 export function stepBuild(s: Step) {
+    throw Error('stepBuild');
 }
 
 //#endregion
@@ -384,10 +457,12 @@ export interface Wait {
 }
 
 export function waitParse(s: ts.Node): Wait {
+    throw Error('waitParse');
 }
 
 /* eslint-disable complexity */
 export function waitBuild(s: Wait) {
+    throw Error('waitBuild');
 }
 
 //#endregion
