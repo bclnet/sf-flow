@@ -44,7 +44,7 @@ export function operatorToString(s: Operator, left: string, right: Value): strin
         case Operator.GreaterThan: return `${left} > ${valueToString(right)}`;
         case Operator.Contains: return `${left} in ${valueToString(right)}`;
         case Operator.LessThanOrEqualTo: return `${left} >= ${valueToString(right)}`;
-        default: throw Error(`Unknown Operator ${s}`);
+        // default: throw Error(`Unknown Operator ${s}`);
     }
 }
 
@@ -59,7 +59,7 @@ export function operatorFromExpression(s: ts.BinaryExpression): [operator: Opera
         case sk.ExclamationEqualsToken: return [Operator.NotEqualTo, left, valueFromExpression(right)];
         case sk.GreaterThanToken: return [Operator.GreaterThan, left, valueFromExpression(right)];
         case sk.LessThanEqualsToken: return [Operator.LessThanOrEqualTo, left, valueFromExpression(right)];
-        default: throw Error(`Unknown Operator ${s}`);
+        default: throw Error(`Unknown Operator ${s.toString()}`);
     }
 }
 
@@ -72,7 +72,7 @@ export function operatorToExpression(s: Operator, left: ts.Expression, right: ts
         case Operator.GreaterThan: return sf.createBinaryExpression(left, sk.GreaterThanToken, right);
         case Operator.Contains: return sf.createBinaryExpression(left, sk.InKeyword, right);
         case Operator.LessThanOrEqualTo: return sf.createBinaryExpression(left, sk.LessThanEqualsToken, right);
-        default: throw Error(`Unknown Operator ${s}`);
+        // default: throw Error(`Unknown Operator ${s}`);
     }
 }
 
@@ -116,7 +116,7 @@ export function conditionsToExpression(logic: ConditionLogic, s: Condition[]): t
     switch (logic) {
         case ConditionLogic.and: operator = sk.AmpersandAmpersandToken; break;
         case ConditionLogic.or: operator = sk.BarBarToken; break;
-        default: throw Error(`Unknown ConditionLogic ${logic}`)
+        // default: throw Error(`Unknown ConditionLogic ${logic}`)
     };
     const expr = conditionToExpression(s[0]);
     s.shift();
@@ -184,8 +184,10 @@ export function filterToQuery(filterLogic: string, filters: RecordFilter[]): str
     const where = filters.map(x => recordFilterToString(x)).join('\0');
     switch (filterLogic) {
         case null: break;
-        case 'and': case 'or': return where.replaceAll('\0', ` ${toPascalCase(filterLogic)} `) as string; break;
-        default: return `#${filterLogic}; ${where.replaceAll('\0', '; ') as string}`; break;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
+        case 'and': case 'or': return where.replaceAll('\0', ` ${toPascalCase(filterLogic)} `); break;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/restrict-template-expressions
+        default: return `#${filterLogic}; ${where.replaceAll('\0', '; ')}`; break;
     }
 }
 

@@ -191,7 +191,7 @@ export function formulaBuild(debug: Debug, s: Formula): ts.ClassElement {
     const lambda = sf.createReturnStatement(sf.createCallExpression(method, undefined, [sf.createStringLiteral(s.expression, true)]));
     const prop = sf.createMethodDeclaration(
         /*decorators*/undefined,
-        /*modifiers*/[sf.createToken(sk.GetKeyword)],
+        /*modifiers*/[sf.createToken(sk.GetKeyword) as undefined],
         /*asteriskToken*/undefined,
         /*name*/sf.createIdentifier(s.name),
         /*questionToken*/undefined,

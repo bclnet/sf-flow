@@ -17,5 +17,3 @@ export default class FlowTsBuilder {
         return result;
     }
 }
-
-//:cls & bin\dev flow:ts:retrieve -u sky.morey@merklecxm.com1.dev01 -p Approve_Order_Summary -o files.ts

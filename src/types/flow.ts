@@ -3,15 +3,14 @@
 import * as ts from 'typescript';
 const sf = ts.factory;
 const sk = ts.SyntaxKind;
-// https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API
 import { toArray } from '../utils';
 import {
     parseLeadingComment, buildLeadingComment,
     Context,
-    Connectorable, Connector, connectorCreate,
+    Connectable, Connector, connectorCreate,
     ProcessMetadataValue,
-    Step, stepParse, stepBuild,
-    Wait, waitParse, waitBuild
+    Step, /*stepParse,*/ stepBuild,
+    Wait, /*waitParse,*/ waitBuild
 } from './flowCommon';
 import {
     Element,
@@ -247,10 +246,10 @@ export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
     // console.log(flow);
 }
 
-export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connect: [Connectorable, string]): void {
+export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connect: [Connectable, string]): void {
     if (!s) return;
     debug.push();
-    let nextConnect: [Connectorable, string];
+    let nextConnect: [Connectable, string];
     // eslint-disable-next-line complexity
     s.forEachChild(c1 => {
         // debug?.log('parse', sk[c1.kind]);
@@ -292,10 +291,11 @@ export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connect: [C
                 nextConnect = loopParse(debug, flow, stmt);
                 break;
             }
+            case sk.ContinueStatement:
             case sk.BreakStatement: {
                 const stmt = c1 as ts.BreakStatement;
-                debug?.log('parse', 'break', stmt.label.text);
-                nextConnect = [{ name: stmt.label.text }, undefined];
+                debug?.log('parse', c1.kind === sk.BreakStatement ? 'break' : 'continue', stmt.label.text);
+                nextConnect = Context.parseTargetStatement(stmt);
                 break;
             }
             // eslint-disable-next-line no-console
@@ -374,10 +374,10 @@ export function flowBuild(debug: Debug, s: Flow): ts.Node {
 
     // #methods
     const ctx = new Context(elements as object);
-    let connector = s.start?.connector ?? { targetReference: s.startElementReference } as Connector;
+    let connector = s.startElementReference ? { targetReference: s.startElementReference } as Connector : s.start?.connector;
     let processType = s.processType;
     do {
-        const block = ctx.buildBlock(debug, connector);
+        const block = ctx.buildBlock(debug, connector) ?? sf.createBlock([]);
         members.push(s.start.build(debug, s, s.start, processType, block));
         connector = ctx.moveNext();
         ctx.stmts.length = 0;

@@ -137,18 +137,22 @@ export class Context {
         this.visted = {};
     }
 
-    public static parseTargetStatement(s: ts.Statement, useBreak?: boolean): Connector {
-        throw Error('parseTargetStatement');
-        return undefined; // useBreak ?? true ? sf.createBreakStatement(s.targetReference) : sf.createContinueStatement(s.targetReference);
+    public static parseTargetStatement(s: ts.Statement): [obj: Connectable, field: string] {
+        return [{ name: (s as ts.BreakStatement).label.text }, undefined];
     }
 
     public static buildTargetStatement(s: Connector, useBreak?: boolean): ts.Statement {
         return useBreak ?? true ? sf.createBreakStatement(s.targetReference) : sf.createContinueStatement(s.targetReference);
     }
 
-    public static parseTargetFaultArgument(s: ts.Expression, useBreak?: boolean): Connector {
-        throw Error('parseTargetFaultArgument');
-        return undefined; // sf.createArrowFunction(undefined, undefined, [], undefined, undefined, sf.createBlock([Context.buildTargetStatement(s, useBreak)], false));
+    public static parseTargetFaultArgument(s: ts.Expression): Connector {
+        const stmt = s as ts.ArrowFunction;
+        if (stmt.kind !== sk.ArrowFunction && stmt.body.kind !== sk.Block) throw Error('parseTargetFaultArgument: invalid arrow function');
+        const [connect,] = Context.parseTargetStatement((stmt.body as ts.Block).statements[0]);
+        return {
+            targetReference: connect.name,
+            processMetadataValues: [],
+        };
     }
 
     public static buildTargetFaultArgument(s: Connector, useBreak?: boolean): ts.Expression {
@@ -176,7 +180,7 @@ export class Context {
     public build(debug: Debug, s: Connector): ts.ClassElement {
         this.counting = false;
         if (!s) return;
-        else if (!this.hasRemain(s)) throw Error(`exists '${s.targetReference}'`); //{ /*this.stmts.push(Context.targetStatement(s));*/ return; }
+        else if (!this.hasRemain(s)) { this.stmts.push(Context.buildTargetStatement(s)); return; }
         const ref = this.remain[s.targetReference] as Element;
         if (!ref) throw Error(`Unknown targetReference '${s.targetReference}`);
         debug?.log('build', ref.build.name.substring(0, ref.build.name.length - 5), ref.name);
@@ -212,7 +216,7 @@ export class Context {
 
 //#region Connector
 
-export interface Connectorable {
+export interface Connectable {
     name: string;
 }
 
@@ -234,7 +238,6 @@ export function connectorCreate(targetReference: string): Connector {
 //#region Value
 
 export enum DataType {
-    Default = undefined,
     Apex = 'Apex',
     SObject = 'SObject',
     Boolean = 'Boolean',
@@ -285,7 +288,7 @@ export function valueToTypeNode(isCollection: boolean, dataType: DataType, scale
         case DataType.Date: typeNode = sf.createTypeReferenceNode('Date'); break;
         case DataType.DateTime: typeNode = sf.createTypeReferenceNode('DateTime'); break;
         case DataType.Picklist: typeNode = sf.createTypeReferenceNode('Picklist'); break;
-        default: throw Error(`valueToTypeNode: Unknown dataType '${dataType}'`);
+        // default: throw Error(`valueToTypeNode: Unknown dataType '${dataType}'`);
     }
     return !isCollection ? typeNode : sf.createArrayTypeNode(typeNode);
 }
@@ -319,7 +322,7 @@ export function valueToExpression(s: Value): ts.Expression {
     else if ('elementReference' in s) return sf.createIdentifier(s.elementReference);
     else if ('numberValue' in s) return sf.createNumericLiteral(s.numberValue);
     else if ('dateValue' in s) return sf.createNumericLiteral(`${s.dateValue}Z`);
-    else throw Error(`valueToExpression: Unknown dataType ${Object.keys(s)}`);
+    else throw Error(`valueToExpression: Unknown dataType ${Object.keys(s).join(', ')}`);
 }
 
 export function valueFromString(s: string): Value {

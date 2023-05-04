@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /* eslint-disable spaced-comment */
 /* eslint-disable @typescript-eslint/ban-types */
 import * as ts from 'typescript';
@@ -10,7 +11,7 @@ import {
     genericFromQuery, genericToQuery,
     DataType, Value,
     Context,
-    Connector, Connectorable,
+    Connector, Connectable,
     ProcessMetadataValue,
     InputParameter, inputParameterFromString, inputParameterToString,
     OutputParameter, outputParameterFromString, outputParameterToString,
@@ -463,7 +464,7 @@ export function decisionParse(debug: Debug, f: Flow, s: ts.IfStatement): [obj: E
         c = stmt.elseStatement;
     }
     if (c && c.kind !== sk.Block) throw Error(`decisionParse expected Block '${sk[c.kind]}'`);
-    const [label2,] = c ? parseTrailingComment(c) : [undefined,];
+    const [label2,] = c ? parseTrailingComment(c) : ['Default Outcome',];
     const prop = objectPurge({
         name,
         label,
@@ -885,7 +886,7 @@ export interface StartSchedule {
     startTime: string;
 }
 
-export interface Start extends Connectorable {
+export interface Start extends Connectable {
     description: string;
     locationX: number;
     locationY: number;

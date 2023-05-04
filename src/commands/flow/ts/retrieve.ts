@@ -59,7 +59,7 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
             const authInfo = await AuthInfo.create({ username: flags.username });
             const conn = await Connection.create({ authInfo });
             conn.setApiVersion(flags.apiversion);
-            flow = await conn.metadata.read('Flow', flags.path);
+            flow = await conn.metadata.read('Flow', flags.path) as unknown as Flow;
         }
 
         if (!flow.fullName) {

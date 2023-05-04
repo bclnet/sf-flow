@@ -13,21 +13,21 @@ export default class FlowTsBuilder {
     public isSupported(): boolean { return this.data ? true : false; }
 
     public toFlow(debug: boolean): Flow {
-        const sourceFile = ts.createSourceFile(this.dataPath, this.data, ts.ScriptTarget.ES2015, /*setParentNodes */true);
+        const sourceFile = ts.createSourceFile(this.dataPath, this.data, ts.ScriptTarget.ES2015, true);
         // this.printRecursiveFrom(sourceFile, 0, sourceFile);
         const flow = flowCreate();
         flowParse(debug ? new Debug() : undefined, flow, sourceFile);
         return flow;
     }
 
-    private printRecursiveFrom(node: ts.Node, indentLevel: number, sourceFile: ts.SourceFile): void {
-        const indentation = '    '.repeat(indentLevel);
-        const syntaxKind = ts.SyntaxKind[node.kind];
-        const nodeText = node.getText(sourceFile);
-        // eslint-disable-next-line no-console
-        console.log(`${indentation}${syntaxKind}: ${nodeText}`);
-        node.forEachChild(child =>
-            this.printRecursiveFrom(child, indentLevel + 1, sourceFile)
-        );
-    }
+    // private printRecursiveFrom(node: ts.Node, indentLevel: number, sourceFile: ts.SourceFile): void {
+    //     const indentation = '    '.repeat(indentLevel);
+    //     const syntaxKind = ts.SyntaxKind[node.kind];
+    //     const nodeText = node.getText(sourceFile);
+    //     // eslint-disable-next-line no-console
+    //     console.log(`${indentation}${syntaxKind}: ${nodeText}`);
+    //     node.forEachChild(child =>
+    //         this.printRecursiveFrom(child, indentLevel + 1, sourceFile)
+    //     );
+    // }
 }

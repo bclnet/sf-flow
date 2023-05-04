@@ -60,6 +60,56 @@
   ],
   "license": "MIT",
   "main": "lib/index.js",
+  "contributes": {
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "sfdx.flow.ts.retrieve",
+          "when": "sfdx:project_opened && resourceLangId != 'forcesourcemanifest'"
+        },
+        {
+          "command": "sfdx.flow.ts.deploy",
+          "when": "sfdx:project_opened && resourceLangId != 'forcesourcemanifest'"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sfdx.flow.ts.retrieve",
+          "when": "sfdx:project_opened"
+        },
+        {
+          "command": "sfdx.flow.ts.deploy",
+          "when": "sfdx:project_opened"
+        },
+        {
+          "command": "sfdx.flow.json.retrieve",
+          "when": "sfdx:project_opened"
+        },
+        {
+          "command": "sfdx.flow.json.deploy",
+          "when": "sfdx:project_opened"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sfdx.flow.ts.retrieve",
+        "title": "%flow_ts_retrieve_text%"
+      },
+      {
+        "command": "sfdx.flow.ts.deploy",
+        "title": "%flow_ts_deploy_text%"
+      },
+      {
+        "command": "sfdx.flow.json.retrieve",
+        "title": "%flow_json_retrieve_text%"
+      },
+      {
+        "command": "sfdx.flow.json.deploy",
+        "title": "%flow_json_deploy_text%"
+      }
+    ]
+  },
   "oclif": {
     "commands": "./lib/commands",
     "bin": "sf",

@@ -2,7 +2,7 @@ import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages, AuthInfo, Connection } from '@salesforce/core';
 import * as fs from 'fs-extra';
 import { jsonStringify } from '../../../utils';
-import { flowSort } from '../../../types/flow';
+import { Flow, flowSort } from '../../../types/flow';
 
 Messages.importMessagesDirectory(__dirname);
 const messages = Messages.load('sf-flow', 'flow.json.retrieve', [
@@ -43,7 +43,7 @@ export default class FlowJsonRetrieve extends SfCommand<FlowJsonRetrieveResult> 
         const authInfo = await AuthInfo.create({ username: flags.username });
         const conn = await Connection.create({ authInfo });
         conn.setApiVersion(flags.apiversion);
-        const flow = await conn.metadata.read('Flow', flags.path);
+        const flow = await conn.metadata.read('Flow', flags.path) as unknown as Flow;
         flowSort(flow);
 
         if (!flow.fullName) {
@@ -54,7 +54,9 @@ export default class FlowJsonRetrieve extends SfCommand<FlowJsonRetrieveResult> 
 
         const targetPath = `${flags.path}.json`;
         const outdir = flags.outdir ? flags.outdir : '.';
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         await fs.ensureDir(outdir);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         fs.writeFileSync(`${outdir}/${targetPath}`, jsonStringify(flow, '  '));
 
         const label: string = flow.label;
