@@ -140,7 +140,7 @@ export function apexPluginCallParse(debug: Debug, f: Flow, s: ts.VariableStateme
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`apexPluginCallParse: bad function '${funcName}(${args.length})'`);
     const [actionName, actionType, inputParameters, outputParameters, flowTransactionModel] = apexPluginCallFromQuery((args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
@@ -238,7 +238,7 @@ export function assignmentParse(debug: Debug, f: Flow, s: ts.VariableStatement, 
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'set' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'set' && !(args.length >= 1 || args.length <= 2)) throw Error(`assignmentParse: bad function '${funcName}(${args.length})'`);
     const assignmentItems = assignmentFromExpression(args[0]);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
@@ -358,7 +358,7 @@ export function recordCreateParse(debug: Debug, f: Flow, s: ts.VariableStatement
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordCreateParse: bad function '${funcName}(${args.length})'`);
     const [assignRecordIdToReference, inputAssignments, object, inputReference] = recordCreateFromQuery((args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
@@ -465,7 +465,7 @@ export function decisionParse(debug: Debug, f: Flow, s: ts.IfStatement): [obj: E
         rules.push(rule);
         c = stmt.elseStatement;
     }
-    if (c && c.kind !== sk.Block) throw Error(`decisionParse expected Block '${sk[c.kind]}'`);
+    if (c && c.kind !== sk.Block) throw Error(`decisionParse: expected Block '${sk[c.kind]}'`);
     const [label2,] = c ? parseTrailingComment(c) : ['Default Outcome',];
     const prop = objectPurge({
         name,
@@ -523,7 +523,7 @@ export function recordDeleteParse(debug: Debug, f: Flow, s: ts.VariableStatement
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordDeleteParse: bad function '${funcName}(${args.length})'`);
     const [inputAssignments, object, inputReference] = recordDeleteFromQuery((args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
@@ -608,7 +608,7 @@ export function recordLookupParse(debug: Debug, f: Flow, s: ts.VariableStatement
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordLookupParse: bad function '${funcName}(${args.length})'`);
     const [queriedFields, filterLogic, filters, getFirstRecordOnly, object, outputAssignments, outputReference, assignNullValuesIfNoRecordsFound] = recordLookupFromQuery((args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
@@ -622,7 +622,7 @@ export function recordLookupParse(debug: Debug, f: Flow, s: ts.VariableStatement
         faultConnector: args.length > 1 ? Context.parseTargetFaultArgument(args[1]) : undefined,
         filterLogic,
         filters,
-        getFirstRecordOnly: assignNullValuesIfNoRecordsFound && !getFirstRecordOnly ? undefined : getFirstRecordOnly,
+        getFirstRecordOnly,
         object,
         outputAssignments,
         outputReference,
@@ -750,8 +750,8 @@ export function recordRollbackParse(debug: Debug, f: Flow, s: ts.VariableStateme
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
-    // const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    // if (funcName !== 'rollback' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+    if (funcName !== 'rollback' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordRollbackParse: bad function '${funcName}(${args.length})'`);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -759,7 +759,7 @@ export function recordRollbackParse(debug: Debug, f: Flow, s: ts.VariableStateme
         locationY: String(locationY),
         description,
         connector: undefined,
-        faultConnector: args.length > 3 ? Context.parseTargetFaultArgument(args[1]) : undefined,
+        faultConnector: args.length > 1 ? Context.parseTargetFaultArgument(args[1]) : undefined,
     }) as RecordRollback;
     f.recordRollbacks = prop;
     //console.log(prop);
@@ -850,7 +850,7 @@ export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'screen' && !(args.length >= 2 || args.length <= 3)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'screen' && !(args.length >= 2 || args.length <= 3)) throw Error(`screenParse: bad function '${funcName}(${args.length})'`);
     const [allowBack, allowFinish, allowPause, showFooter, showHeader] = parseFlags((args[0] as ts.StringLiteral).text);
     const fields = screenFieldsFromExpression(args[1] as ts.ArrayLiteralExpression, 0);
     const prop = objectPurge({
@@ -1039,7 +1039,7 @@ export function startParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): void
             object = (p0.name as ts.Identifier).text;
             break;
         case 'start': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = undefined; break;
-        default: throw Error(`startParse unknown '${name}'`);
+        default: throw Error(`startParse: unknown '${name}'`);
     }
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [interviewLabel, locationX, locationY] = parseLocation(location);
@@ -1088,7 +1088,7 @@ export function startBuild(debug: Debug, f: Flow, s: Start, processType: FlowPro
             parameters.push(sf.createParameterDeclaration(undefined, undefined, undefined, s.object, undefined, undefined, sf.createStringLiteral('record', true)));
             break;
         case [FlowProcessType.AutoLaunchedFlow, undefined].toString(): name = 'start'; break;
-        default: throw Error(`Unknown Start ${[processType, s.triggerType].toString()}`);
+        default: throw Error(`startBuild: unknown Start '${[processType, s.triggerType].toString()}'`);
     }
     const method = sf.createMethodDeclaration(
         /*decorators*/undefined,
@@ -1112,8 +1112,8 @@ export interface Subflow extends Element {
     connector?: Connector;
     faultConnector?: Connector;
     flowName: string;
-    inputAssignments: InputAssignment[];
-    outputAssignments: OutputAssignment[];
+    inputAssignments: InputParameter[];
+    outputAssignments: OutputParameter[];
 }
 
 export function subflowParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
@@ -1122,7 +1122,7 @@ export function subflowParse(debug: Debug, f: Flow, s: ts.VariableStatement, fun
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'query' && !(args.length >= 2)) throw Error(`subflowParse: bad function '${funcName}(${args.length})'`);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -1133,8 +1133,8 @@ export function subflowParse(debug: Debug, f: Flow, s: ts.VariableStatement, fun
         connector: undefined,
         faultConnector: args.length > 3 ? Context.parseTargetFaultArgument(args[1]) : undefined,
         flowName: (args[0] as ts.StringLiteral).text,
-        // inputAssignments: (args[1] as ts.StringLiteral).text,
-        // outputAssignments: (args[2] as ts.StringLiteral).text,
+        inputAssignments: args[1].kind === sk.StringLiteral ? (args[1] as ts.StringLiteral).text.split(',').map(x => inputParameterFromString(x.trim())) : [],
+        outputAssignments: args[2].kind === sk.StringLiteral ? (args[2] as ts.StringLiteral).text.split(',').map(x => outputParameterFromString(x.trim())) : [],
     }) as Subflow;
     f.subflows.push(prop);
     //console.log(prop);
@@ -1148,8 +1148,8 @@ export function subflowBuild(debug: Debug, s: Subflow, ctx: Context): unknown {
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('subflow'));
     const args: ts.Expression[] = [createStringLiteralX(s.flowName)];
-    // args.push(s.inputAssignments ? sf.createNodeArray(s.inputAssignments.map(x => createStringLiteralX(inputAssignmentToString(x)))) : sf.createNull());
-    // args.push(s.outputAssignments ? sf.createNodeArray(s.outputAssignments.map(x => createStringLiteralX(outputAssignmentToString(x)))) : sf.createNull());
+    args.push(s.inputAssignments?.length > 0 ? createStringLiteralX(s.inputAssignments.map(x => inputParameterToString(x)).join(', ')) : sf.createNull());
+    args.push(s.outputAssignments?.length > 0 ? createStringLiteralX(s.outputAssignments.map(x => outputParameterToString(x)).join(', ')) : sf.createNull());
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -1183,7 +1183,7 @@ export function recordUpdateParse(debug: Debug, f: Flow, s: ts.VariableStatement
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordUpdateParse: bad function '${funcName}(${args.length})'`);
     const [filterLogic, filters, inputAssignments, object, inputReference] = recordUpdateFromQuery((args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,

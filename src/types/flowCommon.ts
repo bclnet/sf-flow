@@ -176,7 +176,7 @@ export class Context {
         if (!s) return 0;
         else if (!this.hasRemain(s)) return 1;
         const ref = this.remain[s.targetReference] as Element;
-        if (!ref) throw Error(`Unknown targetReference '${s.targetReference}`);
+        if (!ref) throw Error(`count: unknown targetReference '${s.targetReference}`);
         return 1 + (ref.build(undefined, ref, this) as number);
     }
 
@@ -185,7 +185,7 @@ export class Context {
         if (!s) return;
         else if (!this.hasRemain(s)) { this.stmts.push(Context.buildTargetStatement(s)); return; }
         const ref = this.remain[s.targetReference] as Element;
-        if (!ref) throw Error(`Unknown targetReference '${s.targetReference}`);
+        if (!ref) throw Error(`build: unknown targetReference '${s.targetReference}`);
         debug?.log('build', ref.build.name.substring(0, ref.build.name.length - 5), ref.name);
         this.visted[s.targetReference] = ref;
         delete this.remain[s.targetReference];
@@ -276,7 +276,7 @@ export function valueFromTypeNode(s: ts.TypeNode): [isCollection: boolean, dataT
         case sk.BooleanKeyword: return [isCollection, DataType.Boolean, undefined, typeName];
         case sk.StringKeyword: return [isCollection, DataType.String, undefined, typeName];
         case sk.NumberKeyword: return [isCollection, DataType.Number, 0, typeName];
-        default: throw Error(`Unknown dataType ${sk[s.kind]}`);
+        default: throw Error(`valueFromTypeNode: unknown dataType ${sk[s.kind]}`);
     }
 }
 
@@ -292,7 +292,7 @@ export function valueToTypeNode(isCollection: boolean, dataType: DataType, scale
         case DataType.Date: typeNode = sf.createTypeReferenceNode('Date'); break;
         case DataType.DateTime: typeNode = sf.createTypeReferenceNode('DateTime'); break;
         case DataType.Picklist: typeNode = sf.createTypeReferenceNode('Picklist'); break;
-        // default: throw Error(`valueToTypeNode: Unknown dataType '${dataType}'`);
+        // default: throw Error(`valueToTypeNode: unknown dataType '${dataType}'`);
     }
     return !isCollection ? typeNode : sf.createArrayTypeNode(typeNode);
 }
@@ -306,7 +306,7 @@ export function valueFromExpression(s: ts.Expression, dataType?: DataType): Valu
         else if (s.kind === sk.Identifier || s.kind === sk.PropertyAccessExpression) return { elementReference: (s as ts.PropertyAccessExpression).getText() };
         else if (s.kind === sk.FirstLiteralToken && !isNaN(Number(s.getText()))) return { numberValue: Number(s.getText()) };
         // else if (s.endsWith('Z')) return { dateValue: s.substring(0, s.length - 1) } as Value;
-        else throw Error(`valueFromExpression: Unknown dataType ${sk[s.kind]}`);
+        else throw Error(`valueFromExpression: unknown dataType ${sk[s.kind]}`);
     }
     switch (dataType) {
         case DataType.Boolean: return { booleanValue: s.kind === sk.TrueKeyword };
@@ -327,7 +327,7 @@ export function valueToExpression(s: Value): ts.Expression {
     else if ('elementReference' in s) return sf.createIdentifier(s.elementReference);
     else if ('numberValue' in s) return sf.createNumericLiteral(s.numberValue);
     else if ('dateValue' in s) return sf.createNumericLiteral(`${s.dateValue}Z`);
-    else throw Error(`valueToExpression: Unknown dataType ${Object.keys(s).join(', ')}`);
+    else throw Error(`valueToExpression: unknown dataType ${Object.keys(s).join(', ')}`);
 }
 
 export function valueFromString(s: string): Value {
@@ -337,7 +337,7 @@ export function valueFromString(s: string): Value {
     else if (s.startsWith(':')) return { elementReference: s.substring(1) };
     else if (!isNaN(Number(s))) return { numberValue: Number(s) };
     else if (s.endsWith('Z')) return { dateValue: s.substring(0, s.length - 1) };
-    else throw Error('valueToString: Unknown dataType');
+    else throw Error('valueFromString: unknown dataType');
 }
 
 export function valueToString(s: Value): string {
@@ -386,6 +386,7 @@ export function inputAssignmentToString(s: InputAssignment): string {
 export interface OutputAssignment {
     assignToReference: string;
     field: string;
+    processMetadataValues: ProcessMetadataValue[];
 }
 
 export function outputAssignmentFromString(s: string): OutputAssignment {
@@ -394,6 +395,7 @@ export function outputAssignmentFromString(s: string): OutputAssignment {
     return {
         assignToReference,
         field,
+        processMetadataValues: [],
     };
 }
 
