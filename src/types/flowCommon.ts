@@ -265,17 +265,20 @@ export function valueFromTypeNode(s: ts.TypeNode): [isCollection: boolean, dataT
     const isCollection = s.kind === sk.ArrayType;
     if (isCollection) s = (s as ts.ArrayTypeNode).elementType;
     const typeName = s.getText();
+    let args: ts.TypeNode[];
     switch (s.kind) {
         case sk.TypeReference:
+            args = (s as unknown as ts.TypeReference).typeArguments as unknown as ts.TypeNode[];
             if (typeName.startsWith('apex.')) return [isCollection, DataType.Apex, undefined, typeName.substring(5)];
-            else if (typeName === 'Currency') return [isCollection, DataType.Currency, undefined, typeName];
-            else if (typeName === 'Date') return [isCollection, DataType.Date, undefined, typeName];
-            else if (typeName === 'DateTime') return [isCollection, DataType.DateTime, undefined, typeName];
-            else if (typeName === 'Picklist') return [isCollection, DataType.Picklist, undefined, typeName];
+            else if (typeName.startsWith('Number')) return [isCollection, DataType.Number, args?.length > 0 ? Number(args[0].getText()) : 0, undefined];
+            else if (typeName.startsWith('Currency')) return [isCollection, DataType.Currency, args?.length > 0 ? Number(args[0].getText()) : 0, undefined];
+            else if (typeName === 'Date') return [isCollection, DataType.Date, undefined, undefined];
+            else if (typeName === 'DateTime') return [isCollection, DataType.DateTime, undefined, undefined];
+            else if (typeName === 'Picklist') return [isCollection, DataType.Picklist, undefined, undefined];
             else return [isCollection, DataType.SObject, undefined, typeName];
-        case sk.BooleanKeyword: return [isCollection, DataType.Boolean, undefined, typeName];
-        case sk.StringKeyword: return [isCollection, DataType.String, undefined, typeName];
-        case sk.NumberKeyword: return [isCollection, DataType.Number, 0, typeName];
+        case sk.BooleanKeyword: return [isCollection, DataType.Boolean, undefined, undefined];
+        case sk.StringKeyword: return [isCollection, DataType.String, undefined, undefined];
+        case sk.NumberKeyword: return [isCollection, DataType.Number, 0, undefined];
         default: throw Error(`valueFromTypeNode: unknown dataType ${sk[s.kind]}`);
     }
 }
@@ -287,8 +290,8 @@ export function valueToTypeNode(isCollection: boolean, dataType: DataType, scale
         case DataType.SObject: typeNode = sf.createTypeReferenceNode(typeName); break;
         case DataType.Boolean: typeNode = sf.createKeywordTypeNode(sk.BooleanKeyword); break;
         case DataType.String: typeNode = sf.createKeywordTypeNode(sk.StringKeyword); break;
-        case DataType.Number: typeNode = sf.createKeywordTypeNode(sk.NumberKeyword); break;
-        case DataType.Currency: typeNode = sf.createTypeReferenceNode('Currency'); break;
+        case DataType.Number: typeNode = scale === 0 ? sf.createKeywordTypeNode(sk.NumberKeyword) : sf.createTypeReferenceNode(sf.createIdentifier('Number'), [sf.createLiteralTypeNode(sf.createNumericLiteral(scale))]); break;
+        case DataType.Currency: typeNode = sf.createTypeReferenceNode(sf.createIdentifier('Currency'), [sf.createLiteralTypeNode(sf.createNumericLiteral(scale))]); break;
         case DataType.Date: typeNode = sf.createTypeReferenceNode('Date'); break;
         case DataType.DateTime: typeNode = sf.createTypeReferenceNode('DateTime'); break;
         case DataType.Picklist: typeNode = sf.createTypeReferenceNode('Picklist'); break;
@@ -297,6 +300,7 @@ export function valueToTypeNode(isCollection: boolean, dataType: DataType, scale
     return !isCollection ? typeNode : sf.createArrayTypeNode(typeNode);
 }
 
+// eslint-disable-next-line complexity
 export function valueFromExpression(s: ts.Expression, dataType?: DataType): Value {
     if (!s) return undefined;
     if (!dataType) {
@@ -308,15 +312,17 @@ export function valueFromExpression(s: ts.Expression, dataType?: DataType): Valu
         // else if (s.endsWith('Z')) return { dateValue: s.substring(0, s.length - 1) } as Value;
         else throw Error(`valueFromExpression: unknown dataType ${sk[s.kind]}`);
     }
+    if (s.kind === sk.Identifier || s.kind === sk.PropertyAccessExpression) return { elementReference: s.getText() };
     switch (dataType) {
         case DataType.Boolean: return { booleanValue: s.kind === sk.TrueKeyword };
         case DataType.String: return { stringValue: (s as ts.StringLiteral).text };
         case DataType.Number: return { numberValue: Number((s as ts.NumericLiteral).text) };
         case DataType.Currency: return { numberValue: Number((s as ts.NumericLiteral).text) };
-        case DataType.Date: return { dateValue: (s as ts.StringLiteral).text };
+        case DataType.Date: return { dateValue: (s as ts.StringLiteral).text?.substring(0, (s as ts.StringLiteral).text.length - 1) };
         case DataType.DateTime: return { dateValue: (s as ts.StringLiteral).text };
         case DataType.Picklist: return { stringValue: (s as ts.StringLiteral).text };
-        default: throw Error(`valueFromExpression: Unknown dataType '${dataType}'`);
+        case DataType.SObject: return { elementReference: (s as ts.StringLiteral).text };
+        default: throw Error(`valueFromExpression: unknown dataType '${dataType}'`);
     }
 }
 
@@ -326,7 +332,7 @@ export function valueToExpression(s: Value): ts.Expression {
     else if ('stringValue' in s) return sf.createStringLiteral(s.stringValue, true);
     else if ('elementReference' in s) return sf.createIdentifier(s.elementReference);
     else if ('numberValue' in s) return sf.createNumericLiteral(s.numberValue);
-    else if ('dateValue' in s) return sf.createNumericLiteral(`${s.dateValue}Z`);
+    else if ('dateValue' in s) return sf.createStringLiteral(`${s.dateValue}Z`, true); //sf.createNewExpression(sf.createIdentifier('Date'), undefined, [sf.createStringLiteral(`${s.dateValue}Z`, true)]);
     else throw Error(`valueToExpression: unknown dataType ${Object.keys(s).join(', ')}`);
 }
 

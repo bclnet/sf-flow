@@ -48,7 +48,7 @@ export function choiceParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): v
     const args = func.arguments;
     const funcName = (func.expression as ts.Identifier).escapedText as string;
     if (funcName !== 'Choice' && func.typeArguments.length !== 1 && !(args.length >= 2 || args.length <= 3)) throw Error(`choiceParse: bad function '${funcName}<${func.typeArguments.length}>(${args.length})'`);
-    const [, dataType,] = valueFromTypeNode(func.typeArguments[0]);
+    const [, dataType] = valueFromTypeNode(func.typeArguments[0]);
     const prop: Choice = objectPurge({
         name: (s.name as ts.Identifier).text,
         description,
@@ -64,8 +64,8 @@ export function choiceParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): v
 
 /* eslint-disable complexity */
 export function choiceBuild(debug: Debug, s: Choice): ts.ClassElement {
-    const args: ts.Expression[] = [sf.createStringLiteral(s.choiceText, true), valueToExpression(s.value)];
-    if (s.displayField) args.push(sf.createStringLiteral(s.displayField, true));
+    const args: ts.Expression[] = [createStringLiteralX(s.choiceText), valueToExpression(s.value)];
+    if (s.displayField) args.push(createStringLiteralX(s.displayField));
     const prop = sf.createPropertyDeclaration(
         /*decorators*/undefined,
         /*modifiers*/undefined,
@@ -99,7 +99,7 @@ export function dynamicChoiceSetParse(debug: Debug, f: Flow, s: ts.PropertyDecla
     const funcName = (func.expression as ts.Identifier).escapedText as string;
     if (funcName !== 'DynamicChoice' && !(args.length >= 1 || args.length <= 2)) throw Error(`dynamicChoiceSetParse: bad function '${funcName}(${args.length})'`);
     const [displayField, filterLogic, filters, outputAssignments, object, valueField] = dynamicChoiceSetFromQuery((args[0] as ts.StringLiteral).text);
-    const [, dataType,] = valueFromTypeNode(func.typeArguments[0]);
+    const [, dataType] = valueFromTypeNode(func.typeArguments[0]);
     const prop = objectPurge({
         name: (s.name as ts.Identifier).text,
         description,
@@ -162,7 +162,7 @@ export interface Constant extends Resource {
 
 export function constantParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
-    const [, dataType,] = valueFromTypeNode(s.type)
+    const [, dataType] = valueFromTypeNode(s.type)
     const prop = objectPurge({
         name: (s.name as ts.Identifier).text,
         description,
@@ -223,7 +223,7 @@ export function formulaParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): vo
 /* eslint-disable complexity */
 export function formulaBuild(debug: Debug, s: Formula): ts.ClassElement {
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('formula'));
-    const lambda = sf.createReturnStatement(sf.createCallExpression(method, undefined, [sf.createStringLiteral(s.expression, true)]));
+    const lambda = sf.createReturnStatement(sf.createCallExpression(method, undefined, [createStringLiteralX(s.expression)]));
     const prop = sf.createMethodDeclaration(
         /*decorators*/undefined,
         /*modifiers*/[sf.createToken(sk.GetKeyword) as undefined],
@@ -269,7 +269,7 @@ export function stageParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): vo
 
 /* eslint-disable complexity */
 export function stageBuild(debug: Debug, s: Stage): ts.ClassElement {
-    const args: ts.Expression[] = [sf.createNumericLiteral(s.stageOrder), sf.createStringLiteral(s.label, true)];
+    const args: ts.Expression[] = [sf.createNumericLiteral(s.stageOrder), createStringLiteralX(s.label)];
     if (!s.isActive) args.push(sf.createToken(sk.FalseKeyword));
     const prop = sf.createPropertyDeclaration(
         /*decorators*/undefined,
@@ -311,7 +311,7 @@ export function textTemplateParse(debug: Debug, f: Flow, s: ts.PropertyDeclarati
 
 /* eslint-disable complexity */
 export function textTemplateBuild(debug: Debug, s: TextTemplate): ts.ClassElement {
-    const args: ts.Expression[] = [sf.createStringLiteral(s.text, true)];
+    const args: ts.Expression[] = [createStringLiteralX(s.text)];
     if (s.isViewedAsPlainText === 'true') args.push(sf.createToken(sk.TrueKeyword));
     const prop = sf.createPropertyDeclaration(
         /*decorators*/undefined,
@@ -358,7 +358,7 @@ export function variableParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration, 
         value: valueFromExpression(s.initializer, dataType),
     }) as Variable;
     f.variables.push(prop);
-    //console.log(prop);
+    // console.log(prop);
 }
 
 /* eslint-disable complexity */
