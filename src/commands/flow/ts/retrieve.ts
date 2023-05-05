@@ -37,7 +37,7 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
         indir: Flags.string({ summary: messages.getMessage('flags.indir.summary'), char: 'i' }),
         outdir: Flags.string({ summary: messages.getMessage('flags.outdir.summary'), char: 'o' }),
         nospinner: Flags.boolean({ summary: messages.getMessage('flags.nospinner.summary') }),
-        debug: Flags.boolean({ summary: messages.getMessage('flags.debug.summary'), char: 'd', default: true }),
+        debug: Flags.boolean({ summary: messages.getMessage('flags.debug.summary'), char: 'd' }),
     };
 
     public async run(): Promise<FlowTsRetrieveResult> {

@@ -173,12 +173,12 @@ export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
         if (s1.kind === sk.ClassDeclaration) {
             debug?.log('parse', sk[s1.kind]);
             const klass = s1 as ts.ClassDeclaration;
-            const [interviewLabel, , description, processMetadataValues] = parseLeadingComment(klass);
+            const [, , , processMetadataValues] = parseLeadingComment(klass);
             f.fullName = klass.name?.text;
             f.status = 'Active';
             f.label = undefined;
-            f.interviewLabel = interviewLabel;
-            f.description = description;
+            f.interviewLabel = undefined;
+            f.description = undefined;
             f.processMetadataValues = processMetadataValues;
         }
         s1.forEachChild(c1 => {
@@ -246,72 +246,72 @@ export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
     // console.log(flow);
 }
 
-export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connect: [Connectable, string]): void {
+export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connector: [Connectable, string]): void {
     if (!s) return;
-    debug.push();
-    let nextConnect: [Connectable, string];
+    debug?.push();
+    let nextConnector: [Connectable, string];
     // eslint-disable-next-line complexity
     s.forEachChild(c1 => {
         // debug?.log('parse', sk[c1.kind]);
         switch (c1.kind) {
             case sk.FirstStatement: {
                 const stmt = c1 as ts.VariableStatement;
-                if (stmt.declarationList?.flags !== ts.NodeFlags.Const && stmt.declarationList.declarations.length !== 1) throw Error('Not sure NodeFlags/Length');
+                if (stmt.declarationList?.flags !== ts.NodeFlags.Const && stmt.declarationList.declarations.length !== 1) throw Error('flowParseBlock: not sure NodeFlags/Length');
                 const decl = stmt.declarationList.declarations[0];
-                if (!decl.initializer) throw Error('Not sure initializer');
+                if (!decl.initializer) throw Error('flowParseBlock: not sure initializer');
                 const func = decl.initializer as ts.CallExpression;
-                if (!func && func.kind !== sk.CallExpression) throw Error('no statement found');
+                if (!func && func.kind !== sk.CallExpression) throw Error('flowParseBlock: no statement found');
                 if (func.expression.kind !== sk.PropertyAccessExpression && (func.expression as ts.PropertyAccessExpression).expression.kind !== sk.ThisKeyword) throw Error('no statement found');
                 const args = func.arguments;
                 const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
                 const arg0text = args.length > 0 ? (args[0] as ts.StringLiteral).text : undefined;
                 debug?.log('parse', funcName, arg0text ? arg0text.substring(0, 6) : '');
-                if (funcName === 'query' && arg0text.startsWith('ACTION')) nextConnect = actionCallParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('APEX')) nextConnect = apexPluginCallParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('INSERT')) nextConnect = recordCreateParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('DELETE')) nextConnect = recordDeleteParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('SELECT')) nextConnect = recordLookupParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) nextConnect = recordUpdateParse(debug, flow, stmt, func);
-                else if (funcName === 'set') nextConnect = assignmentParse(debug, flow, stmt, func);
-                else if (funcName === 'screen') nextConnect = screenParse(debug, flow, stmt, func);
-                else if (funcName === 'subflow') nextConnect = subflowParse(debug, flow, stmt, func);
-                else if (funcName === 'rollback') nextConnect = recordRollbackParse(debug, flow, stmt, func);
+                if (funcName === 'query' && arg0text.startsWith('ACTION')) nextConnector = actionCallParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('APEX')) nextConnector = apexPluginCallParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('INSERT')) nextConnector = recordCreateParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('DELETE')) nextConnector = recordDeleteParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('SELECT')) nextConnector = recordLookupParse(debug, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) nextConnector = recordUpdateParse(debug, flow, stmt, func);
+                else if (funcName === 'set') nextConnector = assignmentParse(debug, flow, stmt, func);
+                else if (funcName === 'screen') nextConnector = screenParse(debug, flow, stmt, func);
+                else if (funcName === 'subflow') nextConnector = subflowParse(debug, flow, stmt, func);
+                else if (funcName === 'rollback') nextConnector = recordRollbackParse(debug, flow, stmt, func);
                 else throw Error(`Unknown func '${funcName} ${arg0text}'`);
                 break;
             }
             case sk.IfStatement: {
                 const stmt = c1 as ts.IfStatement;
                 debug?.log('parse', 'decisionParse');
-                nextConnect = decisionParse(debug, flow, stmt);
+                nextConnector = decisionParse(debug, flow, stmt);
                 break;
             }
             case sk.ForInStatement: {
                 const stmt = c1 as ts.ForInStatement;
                 debug?.log('parse', 'loopParse');
-                nextConnect = loopParse(debug, flow, stmt);
+                nextConnector = loopParse(debug, flow, stmt);
                 break;
             }
             case sk.ContinueStatement:
             case sk.BreakStatement: {
                 const stmt = c1 as ts.BreakStatement;
-                debug?.log('parse', c1.kind === sk.BreakStatement ? 'break' : 'continue', stmt.label.text);
-                nextConnect = Context.parseTargetStatement(stmt);
+                debug?.log('parse', c1.kind === sk.ContinueStatement ? 'continue' : 'break', stmt.label.text);
+                nextConnector = Context.parseTargetStatement(stmt);
                 break;
             }
             // eslint-disable-next-line no-console
             default: console.log(`!${sk[c1.kind]}`, c1.getText(s.getSourceFile())); break;
         }
         // assign block
-        if (connect && nextConnect) {
-            const [obj, field] = connect;
-            const targetReference = nextConnect[0].name;
+        if (connector && nextConnector) {
+            const [obj, field] = connector;
+            const targetReference = nextConnector[0].name;
             debug?.log('assgn', `${obj.name}.${field} = '${targetReference}'`);
             obj[field] = connectorCreate(targetReference);
         }
-        connect = nextConnect;
-        nextConnect = undefined;
+        connector = nextConnector;
+        nextConnector = undefined;
     });
-    debug.pop();
+    debug?.pop();
 }
 
 /* eslint-disable complexity */
@@ -374,7 +374,10 @@ export function flowBuild(debug: Debug, s: Flow): ts.Node {
 
     // #methods
     const ctx = new Context(elements as object);
-    let connector = s.startElementReference ? { targetReference: s.startElementReference } as Connector : s.start?.connector;
+    let connector = s.startElementReference ? {
+        targetReference: s.startElementReference,
+        processMetadataValues: []
+    } as Connector : s.start?.connector;
     let processType = s.processType;
     do {
         const block = ctx.buildBlock(debug, connector) ?? sf.createBlock([]);
@@ -391,7 +394,7 @@ export function flowBuild(debug: Debug, s: Flow): ts.Node {
         /*typeParameters*/undefined,
         /*heritageClauses*/undefined,
         /*members*/members);
-    buildLeadingComment(decl, s.interviewLabel !== (s.label + FlowLabelPrefix) ? s.interviewLabel : undefined, undefined, s.description, s.processMetadataValues);
+    buildLeadingComment(decl, undefined, undefined, undefined, s.processMetadataValues);
     return decl;
 }
 

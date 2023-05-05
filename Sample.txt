@@ -41,7 +41,7 @@ bin\dev flow:ts:retrieve -u sky.morey@merklecxm.com1.dev01 -p Update_Fulfillment
 bin\dev flow:ts:retrieve -u sky.morey@merklecxm.com1.dev01 -p Update_Fulfillment_Flow_A -o files.ts
 
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Approve_Order_Summary -o files.ts
-rem bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Cancel_Item_Flow_A -o files.ts
+bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Cancel_Item_Flow_A -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Capture_Upon_Order_Acceptance -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Create_Fulfillment_Orders_Multiple_Locations_Flow -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Create_Gift_Card_Transaction -o files.ts
@@ -51,11 +51,11 @@ bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Create_Process_Excep
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Credit_Memo_Trigger_Flow_A -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Discount_Flow_A -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Evaluate_Fulfillment_Orders_for_Multiple_Locations -o files.ts
-rem bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Even_Exchange_Flow_A -o files.ts
+bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Even_Exchange_Flow_A -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p OCI_Get_Inventory_Availability_Subflow -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p OCI_Transfer_and_Fulfill_Product_Reservation_Subflow -o files.ts
-rem bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Reship_Order_Flow_A -o files.ts
-rem bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Return_Item_Flow_A -o files.ts
+bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Reship_Order_Flow_A -o files.ts
+bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Return_Item_Flow_A -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p TestElements -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p TestResources -o files.ts
 bin\dev flow:ts:deploy -u sky.morey@merklecxm.com1.dev01 -p Update_Fulfillment_Directive_Field -o files.ts

@@ -38,10 +38,10 @@ export function parseLocation(s: string): [string, number, number] {
 }
 
 export function buildLocation(name: string, locationX: number, locationY: number): string {
-    return name && !locationX && !locationY ? `${name}`
-        : !name && locationX && locationY ? `${locationX}, ${locationY}`
-            : name && locationX && locationY ? `${name}, ${locationX}, ${locationY}`
-                : 'ERROR'
+    return name && locationX === undefined && locationY === undefined ? `${name}`
+        : !name && locationX !== undefined && locationY !== undefined ? `${locationX}, ${locationY}`
+            : name && locationX !== undefined && locationY ? `${name}, ${locationX}, ${locationY}`
+                : 'ERROR';
 }
 
 export function parseLeadingComment(s: ts.Node): [string, string, string, ProcessMetadataValue[]] {
@@ -57,8 +57,8 @@ export function parseLeadingComment(s: ts.Node): [string, string, string, Proces
     const processMetadataValues = c.filter(x => x.startsWith('meta:')).map(x => parseProcessMetadataValue(x));
     const values = c.filter(x => !x.startsWith('meta:'));
     const description = values.length > 1 ? values[0].trim() : undefined;
-    const labelLocation = values[values.length - 1].replace(']', '').split('[', 2);
-    return [labelLocation[0].trim(), labelLocation.length > 1 ? labelLocation[1].trim() : undefined, description, processMetadataValues];
+    const labelLocation = values.length > 0 ? values[values.length - 1].replace(']', '').split('[', 2) : undefined;
+    return [labelLocation?.length > 0 ? labelLocation[0].trim() : undefined, labelLocation?.length > 1 ? labelLocation[1].trim() : undefined, description, processMetadataValues];
 }
 
 export function buildLeadingComment(s: ts.Node, label: string, location: string, description: string, processMetadataValues: ProcessMetadataValue[]): void {
@@ -66,7 +66,7 @@ export function buildLeadingComment(s: ts.Node, label: string, location: string,
         return `meta: ${k.name}${k.value ? ` = ${valueToString(k.value)}` : ''}`;
     }
     if (description) ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, ` ${description}`, true);
-    ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, `${label ? ` ${label}` : ''}${location ? ` [${location}]` : ''}`, true);
+    if (label || location) ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, `${label ? ` ${label}` : ''}${location ? ` [${location}]` : ''}`, true);
     if (processMetadataValues) processMetadataValues.forEach(v => {
         ts.addSyntheticLeadingComment(s, sk.SingleLineCommentTrivia, ` ${buildProcessMetadataValue(v)}`, true);
     });
@@ -96,10 +96,10 @@ export function genericFromQuery(s: string, queryName: string, actionName: strin
     let wherex = s.indexOf('WHERE ', fromx); if (wherex === -1) wherex = fromx; else wherex += 6;
     let limitx = s.indexOf('LIMIT ', wherex); if (limitx === -1) limitx = endx; else limitx += 6;
     const query = s.substring(queryx, queryx === actionx ? fromx - 6 : actionx - actionl - 1);
-    const action = queryx === actionx ? null : s.substring(actionx, actionx === fromx ? actionx === wherex ? limitx === endx ? endx : wherex - 7 : wherex - 7 : fromx - 6);
-    const from = fromx === actionx ? null : s.substring(fromx, fromx === wherex ? limitx === endx ? endx : limitx - 7 : wherex - 7);
-    const where = wherex === fromx ? null : s.substring(wherex, endx === limitx ? endx : limitx - 7);
-    const limit = limitx === endx ? null : s.substring(limitx, endx);
+    const action = queryx === actionx ? undefined : s.substring(actionx, actionx === fromx ? actionx === wherex ? limitx === endx ? endx : wherex - 7 : wherex - 7 : fromx - 6);
+    const from = fromx === actionx ? undefined : s.substring(fromx, fromx === wherex ? limitx === endx ? endx : limitx - 7 : wherex - 7);
+    const where = wherex === fromx ? undefined : s.substring(wherex, endx === limitx ? endx : limitx - 7);
+    const limit = limitx === endx ? undefined : s.substring(limitx, endx);
     // console.log(s);
     // console.log(`query:[${query}]`);
     // console.log(`action:[${action}]`);
@@ -141,8 +141,8 @@ export class Context {
         return [{ name: (s as ts.BreakStatement).label.text }, undefined];
     }
 
-    public static buildTargetStatement(s: Connector, useBreak?: boolean): ts.Statement {
-        return useBreak ?? true ? sf.createBreakStatement(s.targetReference) : sf.createContinueStatement(s.targetReference);
+    public static buildTargetStatement(s: Connector): ts.Statement {
+        return sf.createBreakStatement(s.targetReference); //s.isGoTo ? sf.createContinueStatement(s.targetReference)
     }
 
     public static parseTargetFaultArgument(s: ts.Expression): Connector {
@@ -155,15 +155,18 @@ export class Context {
         };
     }
 
-    public static buildTargetFaultArgument(s: Connector, useBreak?: boolean): ts.Expression {
-        return sf.createArrowFunction(undefined, undefined, [], undefined, undefined, sf.createBlock([Context.buildTargetStatement(s, useBreak)], false));
+    public static buildTargetFaultArgument(s: Connector): ts.Expression {
+        return sf.createArrowFunction(undefined, undefined, [], undefined, undefined, sf.createBlock([Context.buildTargetStatement(s)], false));
     }
 
     public moveNext(): Connector {
         this.counted = {};
         const refs = Object.keys(this.remain).sort((l, r) => this.countReference(l) - this.countReference(r));
-        if (refs.length === 0) return null;
-        return { targetReference: refs[0] } as Connector
+        if (refs.length === 0) return undefined;
+        return {
+            targetReference: refs[0],
+            processMetadataValues: []
+        };
     }
 
     public hasRemain(s: Connector): boolean { return s.targetReference in this.remain; }
@@ -206,7 +209,7 @@ export class Context {
     private countReference(s: string): number {
         let count = this.counted[s] as number;
         if (count) return count;
-        count = this.count({ targetReference: s } as Connector);
+        count = this.count({ targetReference: s, processMetadataValues: [] } as Connector);
         this.counted[s] = count;
         return count;
     }
@@ -226,8 +229,9 @@ export interface Connector {
     processMetadataValues: ProcessMetadataValue[];
 }
 
-export function connectorCreate(targetReference: string): Connector {
+export function connectorCreate(targetReference: string, isGoTo?: boolean): Connector {
     return {
+        isGoTo,
         targetReference,
         processMetadataValues: [],
     };
@@ -294,6 +298,7 @@ export function valueToTypeNode(isCollection: boolean, dataType: DataType, scale
 }
 
 export function valueFromExpression(s: ts.Expression, dataType?: DataType): Value {
+    if (!s) return undefined;
     if (!dataType) {
         if (s.kind === sk.NullKeyword) return undefined;
         else if (s.kind === sk.TrueKeyword || s.kind === sk.FalseKeyword) return { booleanValue: s.kind === sk.TrueKeyword };
@@ -327,7 +332,7 @@ export function valueToExpression(s: Value): ts.Expression {
 
 export function valueFromString(s: string): Value {
     if (!s) return undefined;
-    else if (s === 'true' || s === 'false') return { booleanValue: Boolean(s) };
+    else if (s === 'true' || s === 'false') return { booleanValue: s === 'true' };
     else if (s.startsWith('\'')) return { stringValue: s.substring(1, s.length - 1) };
     else if (s.startsWith(':')) return { elementReference: s.substring(1) };
     else if (!isNaN(Number(s))) return { numberValue: Number(s) };

@@ -359,7 +359,7 @@ export function recordCreateParse(debug: Debug, f: Flow, s: ts.VariableStatement
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
-    const [inputAssignments, object, inputReference] = recordCreateFromQuery((args[0] as ts.StringLiteral).text);
+    const [assignRecordIdToReference, inputAssignments, object, inputReference] = recordCreateFromQuery((args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -369,10 +369,11 @@ export function recordCreateParse(debug: Debug, f: Flow, s: ts.VariableStatement
         processMetadataValues,
         connector: undefined,
         faultConnector: args.length > 1 ? Context.parseTargetFaultArgument(args[1]) : undefined,
+        assignRecordIdToReference,
         inputAssignments,
         object,
         inputReference,
-        storeOutputAutomatically: String(decl.exclamationToken?.kind !== sk.ExclamationToken),
+        storeOutputAutomatically: decl.exclamationToken?.kind === sk.ExclamationToken ? String(true) : undefined,
     }) as RecordCreate;
     f.recordCreates.push(prop);
     // console.log(prop);
@@ -391,7 +392,7 @@ export function recordCreateBuild(debug: Debug, s: RecordCreate, ctx: Context): 
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
         sf.createVariableDeclaration(
             /*name*/sf.createIdentifier(s.name),
-            /*exclamationToken*/!s.storeOutputAutomatically ? sf.createToken(sk.ExclamationToken) : undefined,
+            /*exclamationToken*/s.storeOutputAutomatically ? sf.createToken(sk.ExclamationToken) : undefined,
             /*type*/undefined,
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
@@ -399,9 +400,10 @@ export function recordCreateBuild(debug: Debug, s: RecordCreate, ctx: Context): 
     ctx.build(debug, s.connector);
 }
 
-function recordCreateFromQuery(s: string): [inputAssignments: InputAssignment[], object: string, inputReference: string] {
-    const [query, action, , ,] = genericFromQuery(s, 'INSERT', 'SET');
+function recordCreateFromQuery(s: string): [assignRecordIdToReference: string, inputAssignments: InputAssignment[], object: string, inputReference: string] {
+    const [query, action, from, ,] = genericFromQuery(s, 'INSERT', 'SET');
     return [
+        /*assignRecordIdToReference*/from,
         /*inputAssignments*/action ? action.split(',').map(x => inputAssignmentFromString(x.trim())) : [],
         /*object*/!query.startsWith('$') ? query : undefined,
         /*inputReference*/query.startsWith('$') ? query.substring(1) : undefined];
@@ -411,7 +413,7 @@ function recordCreateToQuery(s: RecordCreate): string {
     return genericToQuery('INSERT', 'SET',
         /*query*/s.object ?? `$${s.inputReference}`,
         /*action*/s.inputAssignments.length > 0 ? s.inputAssignments.map(x => inputAssignmentToString(x)).join(', ') : undefined,
-        /*from*/undefined,
+        /*from*/s.assignRecordIdToReference,
         /*where*/undefined,
         /*limit*/undefined);
 }
@@ -457,7 +459,7 @@ export function decisionParse(debug: Debug, f: Flow, s: ts.IfStatement): [obj: E
     rules.push(rule);
     let c = s.elseStatement;
     while (c && c.kind === sk.IfStatement) {
-        const stmt = s.elseStatement as ts.IfStatement;
+        const stmt = c as ts.IfStatement;
         rule = parseRule(stmt);
         flowParseBlock(debug, f, stmt.thenStatement, [rule, 'connector']);
         rules.push(rule);
@@ -620,12 +622,12 @@ export function recordLookupParse(debug: Debug, f: Flow, s: ts.VariableStatement
         faultConnector: args.length > 1 ? Context.parseTargetFaultArgument(args[1]) : undefined,
         filterLogic,
         filters,
-        getFirstRecordOnly,
+        getFirstRecordOnly: assignNullValuesIfNoRecordsFound && !getFirstRecordOnly ? undefined : getFirstRecordOnly,
         object,
         outputAssignments,
         outputReference,
         queriedFields,
-        storeOutputAutomatically: decl.exclamationToken?.kind !== sk.ExclamationToken,
+        storeOutputAutomatically: decl.exclamationToken?.kind !== sk.ExclamationToken ? true : undefined,
     }) as RecordLookup;
     f.recordLookups.push(prop);
     //console.log(prop);
@@ -658,7 +660,7 @@ function recordLookupFromQuery(s: string): [queriedFields: string[], filterLogic
     return [
         /*queriedFields*/query === '*' ? [] : query.split(',').map(x => x.trim()),
         /*filterLogic*/filterLogic,
-        /*filters*/filters,
+        /*filters*/filters ?? [],
         /*getFirstRecordOnly*/limit === '1',
         /*object*/from?.startsWith('!') ? from.substring(1) : from,
         /*outputAssignments*/action && !action?.startsWith(':') ? action.split(',').map(x => outputAssignmentFromString(x.trim())) : [],
@@ -697,9 +699,9 @@ export interface Loop extends Element {
 export function loopParse(debug: Debug, f: Flow, s: ts.ForInStatement): [obj: Element, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [name, locationX, locationY] = parseLocation(location);
-    const collectionReference = (s.initializer as ts.Identifier).text;
+    const collectionReference = s.initializer.getText();
     const expr = s.expression as ts.PostfixUnaryExpression;
-    const assignNextValueToReference = (expr.operand as ts.Identifier).text;
+    const assignNextValueToReference = expr.operand.getText();
     const prop = objectPurge({
         name,
         label,
@@ -744,7 +746,7 @@ export interface RecordRollback extends Element {
 }
 
 export function recordRollbackParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
-    const [label, location, description, processMetadataValues] = parseLeadingComment(s);
+    const [label, location, description,] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
@@ -753,10 +755,9 @@ export function recordRollbackParse(debug: Debug, f: Flow, s: ts.VariableStateme
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
-        locationX,
-        locationY,
+        locationX: String(locationX),
+        locationY: String(locationY),
         description,
-        processMetadataValues,
         connector: undefined,
         faultConnector: args.length > 3 ? Context.parseTargetFaultArgument(args[1]) : undefined,
     }) as RecordRollback;
@@ -790,37 +791,42 @@ export function recordRollbackBuild(debug: Debug, s: RecordRollback, ctx: Contex
 //#region Screen - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_screen.htm&type=5
 
 export enum ScreenFieldType {
-    DisplayText,
-    ComponentInstance,
-    RegionContainer,
-    DropdownBox,
-    Region,
+    DisplayText = 'DisplayText',
+    ComponentInstance = 'ComponentInstance',
+    RegionContainer = 'RegionContainer',
+    DropdownBox = 'DropdownBox',
+    Region = 'Region',
 }
 
 export enum ScreenFieldAssoc {
-    Unknown,
-    UseStoredValues,
+    Unknown = 'Unknown',
+    UseStoredValues = 'UseStoredValues',
 }
 
 export interface ScreenField {
-    name: string;
-    choiceReferences: string;
+    choiceReferences: string | string[];
     dataType: DataType;
     extensionName: string;
     fieldText: string;
     fieldType: ScreenFieldType;
     fields: ScreenField[];
     inputParameters: InputParameter[];
+    name: string;
     inputsOnNextNavToAssocScrn: ScreenFieldAssoc;
     isRequired: boolean;
     visibilityRule: ScreenVisibilityRule[];
     outputParameters: OutputParameter[];
+    processMetadataValues: ProcessMetadataValue[];
 }
 
 export interface ScreenVisibilityRule {
     conditionLogic: ConditionLogic;
     name: string;
     conditions: Condition[];
+}
+
+export interface ScreenRules {
+    name: string;
 }
 
 export interface Screen extends Element {
@@ -830,17 +836,23 @@ export interface Screen extends Element {
     connector?: Connector;
     faultConnector?: Connector;
     fields: ScreenField[];
+    rules: ScreenRules[];
     showFooter: boolean;
     showHeader: boolean;
 }
 
 export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+    function parseFlags(flags: string): [allowBack: boolean, allowFinish: boolean, allowPause: boolean, showFooter: boolean, showHeader: boolean] {
+        return [flags.includes('AB'), flags.includes('AF'), flags.includes('AP'), flags.includes('SF'), flags.includes('SH')];
+    }
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
-    // const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
-    // if (funcName !== 'screen' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
+    const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
+    if (funcName !== 'screen' && !(args.length >= 2 || args.length <= 3)) throw Error(`bad function '${funcName}(${args.length})'`);
+    const [allowBack, allowFinish, allowPause, showFooter, showHeader] = parseFlags((args[0] as ts.StringLiteral).text);
+    const fields = screenFieldsFromExpression(args[1] as ts.ArrayLiteralExpression, 0);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -849,7 +861,14 @@ export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func
         description,
         processMetadataValues,
         connector: undefined,
-        faultConnector: args.length > 3 ? Context.parseTargetFaultArgument(args[1]) : undefined,
+        faultConnector: args.length > 2 ? Context.parseTargetFaultArgument(args[2]) : undefined,
+        allowBack,
+        allowFinish,
+        allowPause,
+        fields,
+        rules: [],
+        showFooter,
+        showHeader,
     }) as Screen;
     f.screens.push(prop);
     //console.log(prop);
@@ -859,10 +878,13 @@ export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func
 /* eslint-disable complexity */
 export function screenBuild(debug: Debug, s: Screen, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
+    function buildFlags(): string {
+        return `${s.allowBack ? 'AB' : ''}${s.allowFinish ? 'AF' : ''}${s.allowPause ? 'AP' : ''}${s.showFooter ? 'SF' : ''}${s.showHeader ? 'SH' : ''}`;
+    }
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('screen'));
-    const args: ts.Expression[] = [createStringLiteralX('SCREEN')];
+    const args: ts.Expression[] = [sf.createStringLiteral(buildFlags(), true), s.fields ? screenFieldsToExpression(s.fields, 0) : sf.createNull()];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -876,6 +898,72 @@ export function screenBuild(debug: Debug, s: Screen, ctx: Context): unknown {
     ctx.build(debug, s.connector);
 }
 
+function screenFieldsFromExpression(s: ts.ArrayLiteralExpression, level: number): ScreenField[] {
+    function visibilityRuleFromString(t: string): ScreenVisibilityRule {
+        return {
+            conditionLogic: undefined,
+            name: t,
+            conditions: undefined,
+        };
+    }
+    function choiceReferencesFromString(t: string): string | string[] {
+        return level > 0 ? t : t.split(',').map(x => x.trim());
+    }
+    return s.elements.map(c1 => {
+        const field: object = {
+            choiceReferences: [],
+            fieldType: undefined,
+            inputParameters: [],
+            name: undefined,
+            outputParameters: [],
+            processMetadataValues: [],
+        };
+        (c1 as ts.ObjectLiteralExpression).properties.forEach((p: ts.PropertyAssignment) => {
+            const pis = (p.initializer as ts.StringLiteral).text;
+            switch ((p.name as ts.Identifier).text) {
+                case 'choiceReferences': field['choiceReferences'] = pis ? choiceReferencesFromString(pis) : undefined; break;
+                case 'dataType': field['dataType'] = pis; break;
+                case 'extensionName': field['extensionName'] = pis; break;
+                case 'fieldText': field['fieldText'] = pis; break;
+                case 'fieldType': field['fieldType'] = pis; break;
+                case 'fields': field['fields'] = screenFieldsFromExpression(p.initializer as ts.ArrayLiteralExpression, level + 1); break;
+                case 'inputParameters': field['inputParameters'] = pis ? pis.split(',').map(x => inputParameterFromString(x.trim())) : []; break;
+                case 'name': field['name'] = pis; break;
+                case 'inputsOnNextNavToAssocScrn': field['inputsOnNextNavToAssocScrn'] = pis; break;
+                case 'isRequired': field['isRequired'] = p.initializer.kind === sk.TrueKeyword; break;
+                case 'visibilityRule': field['visibilityRule'] = pis ? pis.split(',').map(x => visibilityRuleFromString(x.trim())) : []; break;
+                case 'outputParameters': field['outputParameters'] = pis ? pis.split(',').map(x => outputParameterFromString(x.trim())) : []; break;
+                default: console.log(`screenFieldsFromExpression: unknown '${(p.name as ts.Identifier).text}'`);
+            }
+        });
+        return field as ScreenField;
+    });
+}
+
+function screenFieldsToExpression(s: ScreenField[], level: number): ts.ArrayLiteralExpression {
+    function visibilityRuleToString(t: ScreenVisibilityRule): string {
+        throw Error('visibilityRuleToString');
+        return t.name;
+    }
+    function choiceReferencesToString(t: string | string[]): string {
+        return level > 0 ? t as string : (t as string[]).join(', ');
+    }
+    return sf.createArrayLiteralExpression(s.map(x => sf.createObjectLiteralExpression([
+        x.choiceReferences && (level > 0 || x.choiceReferences.length > 0) ? sf.createPropertyAssignment(sf.createIdentifier('choiceReferences'), sf.createStringLiteral(choiceReferencesToString(x.choiceReferences), true)) : undefined,
+        x.dataType ? sf.createPropertyAssignment(sf.createIdentifier('dataType'), sf.createStringLiteral(x.dataType, true)) : undefined,
+        x.extensionName ? sf.createPropertyAssignment(sf.createIdentifier('extensionName'), sf.createStringLiteral(x.extensionName, true)) : undefined,
+        x.fieldText ? sf.createPropertyAssignment(sf.createIdentifier('fieldText'), createStringLiteralX(x.fieldText)) : undefined,
+        sf.createPropertyAssignment(sf.createIdentifier('fieldType'), sf.createStringLiteral(x.fieldType, true)),
+        x.fields?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('fields'), screenFieldsToExpression(x.fields, level + 1)) : undefined,
+        x.inputParameters?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('inputParameters'), createStringLiteralX(x.inputParameters.map(k => inputParameterToString(k)).join(', '))) : undefined,
+        sf.createPropertyAssignment(sf.createIdentifier('name'), sf.createStringLiteral(x.name, true)),
+        x.inputsOnNextNavToAssocScrn ? sf.createPropertyAssignment(sf.createIdentifier('inputsOnNextNavToAssocScrn'), sf.createStringLiteral(x.inputsOnNextNavToAssocScrn, true)) : undefined,
+        x.isRequired ? sf.createPropertyAssignment(sf.createIdentifier('isRequired'), sf.createToken(sk.TrueKeyword)) : undefined,
+        x.visibilityRule?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('visibilityRule'), createStringLiteralX(x.visibilityRule.map(k => visibilityRuleToString(k)).join(', '))) : undefined,
+        x.outputParameters?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('outputParameters'), createStringLiteralX(x.outputParameters.map(k => outputParameterToString(k)).join(', '))) : undefined
+    ].filter(k => k), true)), false);
+}
+
 //#endregion
 
 //#region Start - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_start.htm&type=5
@@ -887,7 +975,6 @@ export interface StartSchedule {
 }
 
 export interface Start extends Connectable {
-    description: string;
     locationX: number;
     locationY: number;
     connector?: Connector;
@@ -955,13 +1042,13 @@ export function startParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): void
         default: throw Error(`startParse unknown '${name}'`);
     }
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
-    const [, locationX, locationY] = parseLocation(location);
+    const [interviewLabel, locationX, locationY] = parseLocation(location);
     f.label = label;
-    if (!f.interviewLabel) f.interviewLabel = f.label + FlowLabelPrefix;
+    f.interviewLabel = interviewLabel ? interviewLabel : f.label + FlowLabelPrefix;
+    f.description = description;
     const method = objectPurge({
         locationX,
         locationY,
-        description,
         processMetadataValues,
         connector: undefined,
         schedule,
@@ -1013,7 +1100,7 @@ export function startBuild(debug: Debug, f: Flow, s: Start, processType: FlowPro
         /*parameters*/parameters,
         /*type*/sf.createKeywordTypeNode(sk.VoidKeyword),
         /*body*/block);
-    if (processType !== FlowProcessType.Orphan) buildLeadingComment(method, f.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
+    if (processType !== FlowProcessType.Orphan) buildLeadingComment(method, f.label, buildLocation(f.interviewLabel !== (f.label + FlowLabelPrefix) ? f.interviewLabel : undefined, s.locationX, s.locationY), f.description, s.processMetadataValues);
     return method;
 }
 

@@ -131,7 +131,7 @@ export function constantParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration):
     const prop = objectPurge({
         name: s.name.getText(),
         dataType,
-        value: s.initializer ? valueFromExpression(s.initializer, dataType) : undefined,
+        value: valueFromExpression(s.initializer, dataType),
         description: parseDescription(s),
         processMetadataValues: [],
     }) as Constant;
@@ -318,6 +318,7 @@ export function variableParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration, 
         isOutput: decoratorName.includes('Out'),
         objectType: dataType === DataType.SObject ? typeName : undefined,
         scale,
+        value: valueFromExpression(s.initializer, dataType),
         description: parseDescription(p ?? s),
         processMetadataValues: [],
     }) as Variable;

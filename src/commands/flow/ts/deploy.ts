@@ -37,7 +37,7 @@ export default class FlowTsDeploy extends SfCommand<FlowTsDeployResult> {
         outdir: Flags.string({ summary: messages.getMessage('flags.outdir.summary'), char: 'o' }),
         jsondir: Flags.string({ summary: messages.getMessage('flags.jsondir.summary'), char: 'j', default: 'files.json2' }),
         nospinner: Flags.boolean({ summary: messages.getMessage('flags.nospinner.summary') }),
-        debug: Flags.boolean({ summary: messages.getMessage('flags.debug.summary'), char: 'd', default: true }),
+        debug: Flags.boolean({ summary: messages.getMessage('flags.debug.summary'), char: 'd' }),
     };
 
     public async run(): Promise<FlowTsDeployResult> {
