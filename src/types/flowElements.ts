@@ -30,7 +30,7 @@ export interface Element {
     locationY: number;
     description?: string;
     processMetadataValues?: ProcessMetadataValue[];
-    build: (debug: Debug, s: Element, ctx: Context) => void | number;
+    build: (debug: Debug, v: number, s: Element, ctx: Context) => void | number;
 }
 
 //#region ApexAction - https://help.salesforce.com/s/articleView?id=sf.flow_ref_elements_apex_invocable.htm&type=5
@@ -51,14 +51,14 @@ export interface ActionCall extends Element {
     storeOutputAutomatically?: string;
 }
 
-export function actionCallParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function actionCallParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`bad function '${funcName}(${args.length})'`);
-    const [actionName, actionType, inputParameters, outputParameters, flowTransactionModel] = actionCallFromQuery((args[0] as ts.StringLiteral).text);
+    const [actionName, actionType, inputParameters, outputParameters, flowTransactionModel] = actionCallFromQuery(v, (args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -77,16 +77,16 @@ export function actionCallParse(debug: Debug, f: Flow, s: ts.VariableStatement, 
     }) as ActionCall;
     f.actionCalls.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function actionCallBuild(debug: Debug, s: ActionCall, ctx: Context): unknown {
+export function actionCallBuild(debug: Debug, v: number, s: ActionCall, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [createStringLiteralX(actionCallToQuery(s))];
+    const args: ts.Expression[] = [createStringLiteralX(actionCallToQuery(v, s))];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -97,10 +97,10 @@ export function actionCallBuild(debug: Debug, s: ActionCall, ctx: Context): unkn
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function actionCallFromQuery(s: string): [actionName: string, actionType: string, inputParameters: InputParameter[], outputParameters: OutputParameter[], flowTransactionModel: FlowTransactionModel] {
+function actionCallFromQuery(v: number, s: string): [actionName: string, actionType: string, inputParameters: InputParameter[], outputParameters: OutputParameter[], flowTransactionModel: FlowTransactionModel] {
     const [query, action, from, where, limit] = genericFromQuery(s, 'ACTION', 'SET');
     return [
         /*actionName*/query,
@@ -110,7 +110,7 @@ function actionCallFromQuery(s: string): [actionName: string, actionType: string
         /*flowTransactionModel*/(limit ?? FlowTransactionModel.CurrentTransaction) as FlowTransactionModel];
 }
 
-function actionCallToQuery(s: ActionCall): string {
+function actionCallToQuery(v: number, s: ActionCall): string {
     return genericToQuery('ACTION', 'SET',
         /*query*/s.actionName,
         /*action*/s.inputParameters.length > 0 ? s.inputParameters.map(x => inputParameterToString(x)).join(', ') : undefined,
@@ -134,14 +134,14 @@ export interface ApexPluginCall extends Element {
     storeOutputAutomatically?: string;
 }
 
-export function apexPluginCallParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function apexPluginCallParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`apexPluginCallParse: bad function '${funcName}(${args.length})'`);
-    const [actionName, actionType, inputParameters, outputParameters, flowTransactionModel] = apexPluginCallFromQuery((args[0] as ts.StringLiteral).text);
+    const [actionName, actionType, inputParameters, outputParameters, flowTransactionModel] = apexPluginCallFromQuery(v, (args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -160,16 +160,16 @@ export function apexPluginCallParse(debug: Debug, f: Flow, s: ts.VariableStateme
     }) as ActionCall;
     f.actionCalls.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function apexPluginCallBuild(debug: Debug, s: ApexPluginCall, ctx: Context): unknown {
+export function apexPluginCallBuild(debug: Debug, v: number, s: ApexPluginCall, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [createStringLiteralX(apexPluginCallToQuery(s))];
+    const args: ts.Expression[] = [createStringLiteralX(apexPluginCallToQuery(v, s))];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -180,10 +180,10 @@ export function apexPluginCallBuild(debug: Debug, s: ApexPluginCall, ctx: Contex
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function apexPluginCallFromQuery(s: string): [actionName: string, actionType: string, inputParameters: InputParameter[], outputParameters: OutputParameter[], flowTransactionModel: FlowTransactionModel] {
+function apexPluginCallFromQuery(v: number, s: string): [actionName: string, actionType: string, inputParameters: InputParameter[], outputParameters: OutputParameter[], flowTransactionModel: FlowTransactionModel] {
     const [query, action, from, where, limit] = genericFromQuery(s, 'ACTION', 'SET');
     return [
         /*actionName*/query,
@@ -193,7 +193,7 @@ function apexPluginCallFromQuery(s: string): [actionName: string, actionType: st
         /*flowTransactionModel*/(limit ?? FlowTransactionModel.CurrentTransaction) as FlowTransactionModel];
 }
 
-function apexPluginCallToQuery(s: ApexPluginCall): string {
+function apexPluginCallToQuery(v: number, s: ApexPluginCall): string {
     return genericToQuery('APEX', 'SET',
         /*query*/s.actionName,
         /*action*/s.inputParameters.length > 0 ? s.inputParameters.map(x => inputParameterToString(x)).join(', ') : undefined,
@@ -232,14 +232,14 @@ export interface Assignment extends Element {
     faultConnector?: Connector;
 }
 
-export function assignmentParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function assignmentParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'set' && !(args.length >= 1 || args.length <= 2)) throw Error(`assignmentParse: bad function '${funcName}(${args.length})'`);
-    const assignmentItems = assignmentFromExpression(args[0]);
+    const assignmentItems = assignmentFromExpression(v, args[0]);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -253,16 +253,16 @@ export function assignmentParse(debug: Debug, f: Flow, s: ts.VariableStatement, 
     }) as Assignment;
     f.assignments.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function assignmentBuild(debug: Debug, s: Assignment, ctx: Context): unknown {
+export function assignmentBuild(debug: Debug, v: number, s: Assignment, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('set'));
-    const args: ts.Expression[] = [assignmentToExpression(s.assignmentItems)];
+    const args: ts.Expression[] = [assignmentToExpression(v, s.assignmentItems)];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -273,10 +273,10 @@ export function assignmentBuild(debug: Debug, s: Assignment, ctx: Context): unkn
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function assignmentFromExpression(s: ts.Expression): AssignmentItem[] {
+function assignmentFromExpression(v: number, s: ts.Expression): AssignmentItem[] {
     if (s.kind !== sk.ArrowFunction) throw Error('assignmentFromExpression expected ArrayFunction');
     const body = (s as ts.ArrowFunction).body;
     const items: AssignmentItem[] = [];
@@ -315,7 +315,7 @@ function assignmentFromExpression(s: ts.Expression): AssignmentItem[] {
     return items;
 }
 
-function assignmentToExpression(s: AssignmentItem[]): ts.Expression {
+function assignmentToExpression(v: number, s: AssignmentItem[]): ts.Expression {
     const b = s.map(c => {
         let token: ts.SyntaxKind;
         switch (c.operator) {
@@ -352,14 +352,14 @@ export interface RecordCreate extends Element {
     storeOutputAutomatically: string;
 }
 
-export function recordCreateParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function recordCreateParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordCreateParse: bad function '${funcName}(${args.length})'`);
-    const [assignRecordIdToReference, inputAssignments, object, inputReference] = recordCreateFromQuery((args[0] as ts.StringLiteral).text);
+    const [assignRecordIdToReference, inputAssignments, object, inputReference] = recordCreateFromQuery(v, (args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -377,16 +377,16 @@ export function recordCreateParse(debug: Debug, f: Flow, s: ts.VariableStatement
     }) as RecordCreate;
     f.recordCreates.push(prop);
     // console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function recordCreateBuild(debug: Debug, s: RecordCreate, ctx: Context): unknown {
+export function recordCreateBuild(debug: Debug, v: number, s: RecordCreate, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [createStringLiteralX(recordCreateToQuery(s))];
+    const args: ts.Expression[] = [createStringLiteralX(recordCreateToQuery(v, s))];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -397,10 +397,10 @@ export function recordCreateBuild(debug: Debug, s: RecordCreate, ctx: Context): 
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function recordCreateFromQuery(s: string): [assignRecordIdToReference: string, inputAssignments: InputAssignment[], object: string, inputReference: string] {
+function recordCreateFromQuery(v: number, s: string): [assignRecordIdToReference: string, inputAssignments: InputAssignment[], object: string, inputReference: string] {
     const [query, action, from, ,] = genericFromQuery(s, 'INSERT', 'SET');
     return [
         /*assignRecordIdToReference*/from,
@@ -409,7 +409,7 @@ function recordCreateFromQuery(s: string): [assignRecordIdToReference: string, i
         /*inputReference*/query.startsWith('$') ? query.substring(1) : undefined];
 }
 
-function recordCreateToQuery(s: RecordCreate): string {
+function recordCreateToQuery(v: number, s: RecordCreate): string {
     return genericToQuery('INSERT', 'SET',
         /*query*/s.object ?? `$${s.inputReference}`,
         /*action*/s.inputAssignments.length > 0 ? s.inputAssignments.map(x => inputAssignmentToString(x)).join(', ') : undefined,
@@ -437,12 +437,14 @@ export interface Decision extends Element {
     defaultConnectorLabel: string;
 }
 
-export function decisionParse(debug: Debug, f: Flow, s: ts.IfStatement): [obj: Element, field: string] {
+export function decisionParse(debug: Debug, v: number, f: Flow, s: ts.IfStatement): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [name, locationX, locationY] = parseLocation(location);
     function parseRule(k: ts.IfStatement): DecisionRule {
         const [label2, name2] = parseTrailingComment(k.thenStatement);
         const [conditionLogic, conditions] = conditionsFromExpression(k.expression);
+        // console.log(k.expression.getText());
+        // console.log(conditionLogic, conditions);
         return {
             name: name2,
             conditionLogic,
@@ -455,13 +457,13 @@ export function decisionParse(debug: Debug, f: Flow, s: ts.IfStatement): [obj: E
 
     const rules: DecisionRule[] = [];
     let rule = parseRule(s);
-    flowParseBlock(debug, f, s.thenStatement, [rule, 'connector']);
+    flowParseBlock(debug, v, f, s.thenStatement, [rule, false, 'connector']);
     rules.push(rule);
     let c = s.elseStatement;
     while (c && c.kind === sk.IfStatement) {
         const stmt = c as ts.IfStatement;
         rule = parseRule(stmt);
-        flowParseBlock(debug, f, stmt.thenStatement, [rule, 'connector']);
+        flowParseBlock(debug, v, f, stmt.thenStatement, [rule, false, 'connector']);
         rules.push(rule);
         c = stmt.elseStatement;
     }
@@ -478,24 +480,24 @@ export function decisionParse(debug: Debug, f: Flow, s: ts.IfStatement): [obj: E
         defaultConnector: undefined,
         defaultConnectorLabel: label2,
     }) as Decision;
-    flowParseBlock(debug, f, c, [prop, 'defaultConnector']);
+    flowParseBlock(debug, v, f, c, [prop, false, 'defaultConnector']);
     f.decisions.push(prop);
     // console.log(prop);
-    return [prop, 'defaultConnector'];
+    return [prop, false, 'defaultConnector'];
 }
 
 /* eslint-disable complexity */
-export function decisionBuild(debug: Debug, s: Decision, ctx: Context): unknown {
+export function decisionBuild(debug: Debug, v: number, s: Decision, ctx: Context): unknown {
     if (ctx.counting) return 1 + Math.max(...s.rules.map(r => ctx.count(r.connector)), ctx.count(s.defaultConnector));
 
     // create stmt
     const rules: Array<[ts.Expression, DecisionRule]> = s.rules.map(r => [conditionsToExpression(r.conditionLogic, r.conditions), r]);
-    let elseStmt = ctx.buildBlock(debug, s.defaultConnector);
+    let elseStmt = ctx.buildBlock(debug, v, s.defaultConnector) ?? (s.defaultConnectorLabel !== 'Default Outcome' ? sf.createBlock([]) : undefined);
     if (elseStmt) buildTrailingComment(elseStmt, s.defaultConnectorLabel, 'default');
     let stmt: ts.IfStatement;
     for (let i = rules.length - 1; i >= 0; i--) {
         const [expr, r] = rules[i];
-        const block = ctx.buildBlock(debug, r.connector) ?? sf.createBlock([]);
+        const block = ctx.buildBlock(debug, v, r.connector) ?? sf.createBlock([]);
         buildTrailingComment(block, r.label, r.name);
         stmt = elseStmt = sf.createIfStatement(expr, block, elseStmt);
         if (i === 0) buildLeadingComment(stmt, s.label, buildLocation(s.name, s.locationX, s.locationY), s.description, s.processMetadataValues);
@@ -517,14 +519,14 @@ export interface RecordDelete extends Element {
     storeOutputAutomatically: string;
 }
 
-export function recordDeleteParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function recordDeleteParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordDeleteParse: bad function '${funcName}(${args.length})'`);
-    const [inputAssignments, object, inputReference] = recordDeleteFromQuery((args[0] as ts.StringLiteral).text);
+    const [inputAssignments, object, inputReference] = recordDeleteFromQuery(v, (args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -541,16 +543,16 @@ export function recordDeleteParse(debug: Debug, f: Flow, s: ts.VariableStatement
     }) as RecordCreate;
     f.recordCreates.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function recordDeleteBuild(debug: Debug, s: RecordDelete, ctx: Context): unknown {
+export function recordDeleteBuild(debug: Debug, v: number, s: RecordDelete, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [createStringLiteralX(recordDeleteToQuery(s))];
+    const args: ts.Expression[] = [createStringLiteralX(recordDeleteToQuery(v, s))];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -561,10 +563,10 @@ export function recordDeleteBuild(debug: Debug, s: RecordDelete, ctx: Context): 
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function recordDeleteFromQuery(s: string): [inputAssignments: InputAssignment[], object: string, inputReference: string] {
+function recordDeleteFromQuery(v: number, s: string): [inputAssignments: InputAssignment[], object: string, inputReference: string] {
     const [query, action, , ,] = genericFromQuery(s, 'DELETE', 'SET');
     return [
         /*inputAssignments*/action ? action.split(',').map(x => inputAssignmentFromString(x.trim())) : [],
@@ -572,7 +574,7 @@ function recordDeleteFromQuery(s: string): [inputAssignments: InputAssignment[],
         /*inputReference*/query.startsWith('$') ? query.substring(1) : undefined];
 }
 
-function recordDeleteToQuery(s: RecordDelete): string {
+function recordDeleteToQuery(v: number, s: RecordDelete): string {
     return genericToQuery('DELETE', 'SET',
         /*query*/s.object ?? `$${s.inputReference}`,
         /*action*/s.inputAssignments.length > 0 ? s.inputAssignments.map(x => inputAssignmentToString(x)).join(', ') : undefined,
@@ -602,14 +604,14 @@ export interface RecordLookup extends Element {
     storeOutputAutomatically: boolean;
 }
 
-export function recordLookupParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function recordLookupParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordLookupParse: bad function '${funcName}(${args.length})'`);
-    const [queriedFields, filterLogic, filters, getFirstRecordOnly, object, outputAssignments, outputReference, assignNullValuesIfNoRecordsFound] = recordLookupFromQuery((args[0] as ts.StringLiteral).text);
+    const [queriedFields, filterLogic, filters, getFirstRecordOnly, object, outputAssignments, outputReference, assignNullValuesIfNoRecordsFound] = recordLookupFromQuery(v, (args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -631,16 +633,16 @@ export function recordLookupParse(debug: Debug, f: Flow, s: ts.VariableStatement
     }) as RecordLookup;
     f.recordLookups.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function recordLookupBuild(debug: Debug, s: RecordLookup, ctx: Context): unknown {
+export function recordLookupBuild(debug: Debug, v: number, s: RecordLookup, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [createStringLiteralX(recordLookupToQuery(s))];
+    const args: ts.Expression[] = [createStringLiteralX(recordLookupToQuery(v, s))];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -651,24 +653,24 @@ export function recordLookupBuild(debug: Debug, s: RecordLookup, ctx: Context): 
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function recordLookupFromQuery(s: string): [queriedFields: string[], filterLogic: string, filters: RecordFilter[], getFirstRecordOnly: boolean, object: string, outputAssignments: OutputAssignment[], outputReference: string, assignNullValuesIfNoRecordsFound: boolean] {
+function recordLookupFromQuery(v: number, s: string): [queriedFields: string[], filterLogic: string, filters: RecordFilter[], getFirstRecordOnly: boolean, object: string, outputAssignments: OutputAssignment[], outputReference: string, assignNullValuesIfNoRecordsFound: boolean] {
     const [query, action, from, where, limit] = genericFromQuery(s, 'SELECT', 'OUTPUT');
     const [filterLogic, filters] = filterFromQuery(where);
     return [
         /*queriedFields*/query === '*' ? [] : query.split(',').map(x => x.trim()),
         /*filterLogic*/filterLogic,
         /*filters*/filters ?? [],
-        /*getFirstRecordOnly*/limit === '1',
+        /*getFirstRecordOnly*/limit === '1' ? true : v >= 50.0 ? false : undefined,
         /*object*/from?.startsWith('!') ? from.substring(1) : from,
         /*outputAssignments*/action && !action?.startsWith(':') ? action.split(',').map(x => outputAssignmentFromString(x.trim())) : [],
         /*outputReference*/action?.startsWith(':') ? action.substring(1) : undefined,
         /*assignNullValuesIfNoRecordsFound*/from?.startsWith('!')];
 }
 
-function recordLookupToQuery(s: RecordLookup): string {
+function recordLookupToQuery(v: number, s: RecordLookup): string {
     return genericToQuery('SELECT', 'OUTPUT',
         /*query*/s.queriedFields?.length > 0 ? s.queriedFields.join(', ') : '*',
         /*action*/s.outputAssignments.length > 0 ? s.outputAssignments.map(x => outputAssignmentToString(x)).join(', ')
@@ -696,7 +698,7 @@ export interface Loop extends Element {
     noMoreValuesConnector?: Connector;
 }
 
-export function loopParse(debug: Debug, f: Flow, s: ts.ForInStatement): [obj: Element, field: string] {
+export function loopParse(debug: Debug, v: number, f: Flow, s: ts.ForInStatement): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [name, locationX, locationY] = parseLocation(location);
     const collectionReference = s.initializer.getText();
@@ -715,25 +717,25 @@ export function loopParse(debug: Debug, f: Flow, s: ts.ForInStatement): [obj: El
         nextValueConnector: undefined,
         noMoreValuesConnector: undefined,
     }) as Loop;
-    flowParseBlock(debug, f, s.statement, [prop, 'nextValueConnector']);
+    flowParseBlock(debug, v, f, s.statement, [prop, false, 'nextValueConnector']);
     f.loops.push(prop);
     //console.log(prop);
-    return [prop, 'noMoreValuesConnector'];
+    return [prop, false, 'noMoreValuesConnector'];
 }
 
 /* eslint-disable complexity */
-export function loopBuild(debug: Debug, s: Loop, ctx: Context): unknown {
+export function loopBuild(debug: Debug, v: number, s: Loop, ctx: Context): unknown {
     if (ctx.counting) return 1 + Math.max(ctx.count(s.nextValueConnector), ctx.count(s.noMoreValuesConnector));
 
     // create stmt
-    const block = ctx.buildBlock(debug, s.nextValueConnector);
+    const block = ctx.buildBlock(debug, v, s.nextValueConnector);
     const stmt = sf.createForInStatement(
         /*initializer*/sf.createIdentifier(s.collectionReference),
         /*expression*/sf.createPostfixUnaryExpression(sf.createIdentifier(s.assignNextValueToReference ? s.assignNextValueToReference : s.collectionReference), s.iterationOrder === LoopIterationOrder.Desc ? sk.MinusMinusToken : sk.PlusPlusToken),
         /*statement*/block);
     buildLeadingComment(stmt, s.label, buildLocation(s.name, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.noMoreValuesConnector);
+    ctx.build(debug, v, s.noMoreValuesConnector);
 }
 
 //#endregion
@@ -745,7 +747,7 @@ export interface RecordRollback extends Element {
     faultConnector?: Connector;
 }
 
-export function recordRollbackParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function recordRollbackParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description,] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
@@ -763,11 +765,11 @@ export function recordRollbackParse(debug: Debug, f: Flow, s: ts.VariableStateme
     }) as RecordRollback;
     f.recordRollbacks = prop;
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function recordRollbackBuild(debug: Debug, s: RecordRollback, ctx: Context): unknown {
+export function recordRollbackBuild(debug: Debug, v: number, s: RecordRollback, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
@@ -783,7 +785,7 @@ export function recordRollbackBuild(debug: Debug, s: RecordRollback, ctx: Contex
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
 //#endregion
@@ -841,7 +843,7 @@ export interface Screen extends Element {
     showHeader: boolean;
 }
 
-export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function screenParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     function parseFlags(flags: string): [allowBack: boolean, allowFinish: boolean, allowPause: boolean, showFooter: boolean, showHeader: boolean] {
         return [flags.includes('AB'), flags.includes('AF'), flags.includes('AP'), flags.includes('SF'), flags.includes('SH')];
     }
@@ -852,7 +854,7 @@ export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'screen' && !(args.length >= 2 || args.length <= 3)) throw Error(`screenParse: bad function '${funcName}(${args.length})'`);
     const [allowBack, allowFinish, allowPause, showFooter, showHeader] = parseFlags((args[0] as ts.StringLiteral).text);
-    const fields = screenFieldsFromExpression(args[1] as ts.ArrayLiteralExpression, 0);
+    const fields = screenFieldsFromExpression(v, args[1] as ts.ArrayLiteralExpression, 0);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -872,11 +874,11 @@ export function screenParse(debug: Debug, f: Flow, s: ts.VariableStatement, func
     }) as Screen;
     f.screens.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function screenBuild(debug: Debug, s: Screen, ctx: Context): unknown {
+export function screenBuild(debug: Debug, v: number, s: Screen, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
     function buildFlags(): string {
         return `${s.allowBack ? 'AB' : ''}${s.allowFinish ? 'AF' : ''}${s.allowPause ? 'AP' : ''}${s.showFooter ? 'SF' : ''}${s.showHeader ? 'SH' : ''}`;
@@ -884,7 +886,7 @@ export function screenBuild(debug: Debug, s: Screen, ctx: Context): unknown {
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('screen'));
-    const args: ts.Expression[] = [sf.createStringLiteral(buildFlags(), true), s.fields ? screenFieldsToExpression(s.fields, 0) : sf.createNull()];
+    const args: ts.Expression[] = [sf.createStringLiteral(buildFlags(), true), s.fields ? screenFieldsToExpression(v, s.fields, 0) : sf.createNull()];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -895,10 +897,10 @@ export function screenBuild(debug: Debug, s: Screen, ctx: Context): unknown {
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function screenFieldsFromExpression(s: ts.ArrayLiteralExpression, level: number): ScreenField[] {
+function screenFieldsFromExpression(v: number, s: ts.ArrayLiteralExpression, level: number): ScreenField[] {
     function visibilityRuleFromString(t: string): ScreenVisibilityRule {
         return {
             conditionLogic: undefined,
@@ -926,7 +928,7 @@ function screenFieldsFromExpression(s: ts.ArrayLiteralExpression, level: number)
                 case 'extensionName': field['extensionName'] = pis; break;
                 case 'fieldText': field['fieldText'] = pis; break;
                 case 'fieldType': field['fieldType'] = pis; break;
-                case 'fields': field['fields'] = screenFieldsFromExpression(p.initializer as ts.ArrayLiteralExpression, level + 1); break;
+                case 'fields': field['fields'] = screenFieldsFromExpression(v, p.initializer as ts.ArrayLiteralExpression, level + 1); break;
                 case 'inputParameters': field['inputParameters'] = pis ? pis.split(',').map(x => inputParameterFromString(x.trim())) : []; break;
                 case 'name': field['name'] = pis; break;
                 case 'inputsOnNextNavToAssocScrn': field['inputsOnNextNavToAssocScrn'] = pis; break;
@@ -940,7 +942,7 @@ function screenFieldsFromExpression(s: ts.ArrayLiteralExpression, level: number)
     });
 }
 
-function screenFieldsToExpression(s: ScreenField[], level: number): ts.ArrayLiteralExpression {
+function screenFieldsToExpression(v: number, s: ScreenField[], level: number): ts.ArrayLiteralExpression {
     function visibilityRuleToString(t: ScreenVisibilityRule): string {
         throw Error('visibilityRuleToString');
         return t.name;
@@ -954,7 +956,7 @@ function screenFieldsToExpression(s: ScreenField[], level: number): ts.ArrayLite
         x.extensionName ? sf.createPropertyAssignment(sf.createIdentifier('extensionName'), sf.createStringLiteral(x.extensionName, true)) : undefined,
         x.fieldText ? sf.createPropertyAssignment(sf.createIdentifier('fieldText'), createStringLiteralX(x.fieldText)) : undefined,
         sf.createPropertyAssignment(sf.createIdentifier('fieldType'), sf.createStringLiteral(x.fieldType, true)),
-        x.fields?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('fields'), screenFieldsToExpression(x.fields, level + 1)) : undefined,
+        x.fields?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('fields'), screenFieldsToExpression(v, x.fields, level + 1)) : undefined,
         x.inputParameters?.length > 0 ? sf.createPropertyAssignment(sf.createIdentifier('inputParameters'), createStringLiteralX(x.inputParameters.map(k => inputParameterToString(k)).join(', '))) : undefined,
         sf.createPropertyAssignment(sf.createIdentifier('name'), sf.createStringLiteral(x.name, true)),
         x.inputsOnNextNavToAssocScrn ? sf.createPropertyAssignment(sf.createIdentifier('inputsOnNextNavToAssocScrn'), sf.createStringLiteral(x.inputsOnNextNavToAssocScrn, true)) : undefined,
@@ -986,10 +988,10 @@ export interface Start extends Connectable {
     recordTriggerType?: string;
     triggerType?: string;
     processMetadataValues: ProcessMetadataValue[];
-    build: (debug: Debug, f: Flow, start: Start, processType: FlowProcessType, block: ts.Statement) => ts.ClassElement;
+    build: (debug: Debug, v: number, f: Flow, start: Start, processType: FlowProcessType, block: ts.Statement) => ts.ClassElement;
 }
 
-export function startParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): void {
+export function startParse(debug: Debug, v: number, f: Flow, s: ts.MethodDeclaration): void {
     let schedule: StartSchedule;
     let filterFormula: string;
     let filterLogic: string;
@@ -1013,7 +1015,7 @@ export function startParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): void
     const p1 = s.parameters.length > pi + 1 ? s.parameters[pi + 1] : undefined;
     const name = (s.name as ts.Identifier).text;
     switch (name) {
-        case 'orphan': flowParseBlock(debug, f, s.body, undefined); return;
+        case 'orphan': flowParseBlock(debug, v, f, s.body, undefined); return;
         case 'processBuilder': f.processType = FlowProcessType.CustomEvent; triggerType = undefined; break;
         case 'screen': f.processType = FlowProcessType.Flow; triggerType = undefined; break;
         case 'scheduled': f.processType = FlowProcessType.AutoLaunchedFlow; triggerType = 'Scheduled';
@@ -1060,11 +1062,11 @@ export function startParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): void
         triggerType,
     }) as Start;
     f.start = method;
-    flowParseBlock(debug, f, s.body, [method, 'connector']);
+    flowParseBlock(debug, v, f, s.body, [method, false, 'connector']);
 }
 
 /* eslint-disable complexity */
-export function startBuild(debug: Debug, f: Flow, s: Start, processType: FlowProcessType, block: ts.Block): ts.ClassElement {
+export function startBuild(debug: Debug, v: number, f: Flow, s: Start, processType: FlowProcessType, block: ts.Block): ts.ClassElement {
     const parameters: ts.ParameterDeclaration[] = [];
     if (s.filterLogic) parameters.push(sf.createParameterDeclaration(undefined, undefined, undefined, 'filter', undefined, undefined, createStringLiteralX(filterToQuery(s.filterLogic, s.filters))));
     if (s.filterFormula) parameters.push(sf.createParameterDeclaration(undefined, undefined, undefined, 'filterForumla', undefined, undefined, createStringLiteralX(s.filterFormula)));
@@ -1116,7 +1118,7 @@ export interface Subflow extends Element {
     outputAssignments: OutputParameter[];
 }
 
-export function subflowParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function subflowParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
@@ -1138,11 +1140,11 @@ export function subflowParse(debug: Debug, f: Flow, s: ts.VariableStatement, fun
     }) as Subflow;
     f.subflows.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function subflowBuild(debug: Debug, s: Subflow, ctx: Context): unknown {
+export function subflowBuild(debug: Debug, v: number, s: Subflow, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
@@ -1160,7 +1162,7 @@ export function subflowBuild(debug: Debug, s: Subflow, ctx: Context): unknown {
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
 //#endregion
@@ -1177,14 +1179,14 @@ export interface RecordUpdate extends Element {
     inputReference?: string;
 }
 
-export function recordUpdateParse(debug: Debug, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Element, field: string] {
+export function recordUpdateParse(debug: Debug, v: number, f: Flow, s: ts.VariableStatement, func: ts.CallExpression): [obj: Connectable, isGoto: boolean, field: string] {
     const [label, location, description, processMetadataValues] = parseLeadingComment(s);
     const [, locationX, locationY] = parseLocation(location);
     const decl = s.declarationList.declarations[0];
     const args = func.arguments;
     const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
     if (funcName !== 'query' && !(args.length >= 1 || args.length <= 2)) throw Error(`recordUpdateParse: bad function '${funcName}(${args.length})'`);
-    const [filterLogic, filters, inputAssignments, object, inputReference] = recordUpdateFromQuery((args[0] as ts.StringLiteral).text);
+    const [filterLogic, filters, inputAssignments, object, inputReference] = recordUpdateFromQuery(v, (args[0] as ts.StringLiteral).text);
     const prop = objectPurge({
         name: (decl.name as ts.Identifier).text,
         label,
@@ -1202,16 +1204,16 @@ export function recordUpdateParse(debug: Debug, f: Flow, s: ts.VariableStatement
     }) as RecordUpdate;
     f.recordUpdates.push(prop);
     //console.log(prop);
-    return [prop, 'connector'];
+    return [prop, false, 'connector'];
 }
 
 /* eslint-disable complexity */
-export function recordUpdateBuild(debug: Debug, s: RecordUpdate, ctx: Context): unknown {
+export function recordUpdateBuild(debug: Debug, v: number, s: RecordUpdate, ctx: Context): unknown {
     if (ctx.counting) return 1 + ctx.count(s.connector);
 
     // create stmt
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('query'));
-    const args: ts.Expression[] = [createStringLiteralX(recordUpdateToQuery(s))];
+    const args: ts.Expression[] = [createStringLiteralX(recordUpdateToQuery(v, s))];
     if (s.faultConnector) args.push(Context.buildTargetFaultArgument(s.faultConnector));
     const lambda = sf.createCallExpression(method, undefined, args);
     const stmt = sf.createVariableStatement(undefined, ts.factory.createVariableDeclarationList([
@@ -1222,10 +1224,10 @@ export function recordUpdateBuild(debug: Debug, s: RecordUpdate, ctx: Context): 
             /*initializer*/lambda)], ts.NodeFlags.Const));
     buildLeadingComment(stmt, s.label, buildLocation(null, s.locationX, s.locationY), s.description, s.processMetadataValues);
     ctx.stmts.push(stmt);
-    ctx.build(debug, s.connector);
+    ctx.build(debug, v, s.connector);
 }
 
-function recordUpdateFromQuery(s: string): [filterLogic: string, filters: RecordFilter[], inputAssignments: InputAssignment[], object: string, inputReference: string] {
+function recordUpdateFromQuery(v: number, s: string): [filterLogic: string, filters: RecordFilter[], inputAssignments: InputAssignment[], object: string, inputReference: string] {
     const [query, action, , where,] = genericFromQuery(s, 'UPDATE', 'SET');
     const [filterLogic, filters] = filterFromQuery(where);
     return [
@@ -1236,7 +1238,7 @@ function recordUpdateFromQuery(s: string): [filterLogic: string, filters: Record
         /*inputReference*/query.startsWith('$') ? query : undefined];
 }
 
-function recordUpdateToQuery(s: RecordUpdate): string {
+function recordUpdateToQuery(v: number, s: RecordUpdate): string {
     return genericToQuery('UPDATE', 'SET',
         /*query*/s.object ?? `${s.inputReference}`,
         /*action*/s.inputAssignments.length > 0 ? s.inputAssignments.map(x => inputAssignmentToString(x)).join(', ') : undefined,

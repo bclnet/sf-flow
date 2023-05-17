@@ -118,11 +118,12 @@ export function conditionsToExpression(logic: ConditionLogic, s: Condition[]): t
         case ConditionLogic.or: operator = sk.BarBarToken; break;
         // default: throw Error(`Unknown ConditionLogic ${logic}`)
     };
-    const expr = conditionToExpression(s[0]);
-    s.shift();
-    return s.length === 0
+    const cs = [...s]; // must clone because shift() is distructive.
+    const expr = conditionToExpression(cs[0]);
+    cs.shift();
+    return cs.length === 0
         ? expr
-        : s.reduce((left, c) => sf.createBinaryExpression(left, operator, conditionToExpression(c)), expr);
+        : cs.reduce((left, c) => sf.createBinaryExpression(left, operator, conditionToExpression(c)), expr);
 }
 
 export function conditionFromExpression(s: ts.Expression): Condition {

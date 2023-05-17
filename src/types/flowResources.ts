@@ -29,7 +29,7 @@ export interface Resource {
     name: string;
     description?: string;
     processMetadataValues: ProcessMetadataValue[];
-    build: (debug: Debug, s: Resource) => ts.ClassElement;
+    build: (debug: Debug, v: number, s: Resource) => ts.ClassElement;
 }
 
 //#region Choice - https://help.salesforce.com/s/articleView?id=sf.flow_ref_resources_choice.htm&type=5
@@ -41,7 +41,7 @@ export interface Choice extends Resource {
     value: Value;
 }
 
-export function choiceParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): void {
+export function choiceParse(debug: Debug, v: number, f: Flow, s: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
     const func = s.initializer as ts.NewExpression;
     if (!func && func.kind !== sk.NewExpression) throw Error('choiceParse: no statement found');
@@ -63,7 +63,7 @@ export function choiceParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): v
 }
 
 /* eslint-disable complexity */
-export function choiceBuild(debug: Debug, s: Choice): ts.ClassElement {
+export function choiceBuild(debug: Debug, v: number, s: Choice): ts.ClassElement {
     const args: ts.Expression[] = [createStringLiteralX(s.choiceText), valueToExpression(s.value)];
     if (s.displayField) args.push(createStringLiteralX(s.displayField));
     const prop = sf.createPropertyDeclaration(
@@ -91,14 +91,14 @@ export interface DynamicChoiceSet extends Resource {
     valueField: string;
 }
 
-export function dynamicChoiceSetParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): void {
+export function dynamicChoiceSetParse(debug: Debug, v: number, f: Flow, s: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
     const func = s.initializer as ts.NewExpression;
     if (!func && func.kind !== sk.NewExpression) throw Error('dynamicChoiceSetParse: no statement found');
     const args = func.arguments;
     const funcName = (func.expression as ts.Identifier).escapedText as string;
     if (funcName !== 'DynamicChoice' && !(args.length >= 1 || args.length <= 2)) throw Error(`dynamicChoiceSetParse: bad function '${funcName}(${args.length})'`);
-    const [displayField, filterLogic, filters, outputAssignments, object, valueField] = dynamicChoiceSetFromQuery((args[0] as ts.StringLiteral).text);
+    const [displayField, filterLogic, filters, outputAssignments, object, valueField] = dynamicChoiceSetFromQuery(v, (args[0] as ts.StringLiteral).text);
     const [, dataType] = valueFromTypeNode(func.typeArguments[0]);
     const prop = objectPurge({
         name: (s.name as ts.Identifier).text,
@@ -117,8 +117,8 @@ export function dynamicChoiceSetParse(debug: Debug, f: Flow, s: ts.PropertyDecla
 }
 
 /* eslint-disable complexity */
-export function dynamicChoiceSetBuild(debug: Debug, s: DynamicChoiceSet): ts.ClassElement {
-    const args: ts.Expression[] = [createStringLiteralX(dynamicChoiceSetToQuery(s))];
+export function dynamicChoiceSetBuild(debug: Debug, v: number, s: DynamicChoiceSet): ts.ClassElement {
+    const args: ts.Expression[] = [createStringLiteralX(dynamicChoiceSetToQuery(v, s))];
     const prop = sf.createPropertyDeclaration(
         /*decorators*/undefined,
         /*modifiers*/undefined,
@@ -130,7 +130,7 @@ export function dynamicChoiceSetBuild(debug: Debug, s: DynamicChoiceSet): ts.Cla
     return prop;
 }
 
-function dynamicChoiceSetFromQuery(s: string): [displayField: string, filterLogic: string, filters: RecordFilter[], outputAssignments: OutputAssignment[], object: string, valueField: string] {
+function dynamicChoiceSetFromQuery(v: number, s: string): [displayField: string, filterLogic: string, filters: RecordFilter[], outputAssignments: OutputAssignment[], object: string, valueField: string] {
     const [query, action, from, where, limit] = genericFromQuery(s, 'DYNAMIC', 'SET');
     const [filterLogic, filters] = filterFromQuery(where);
     return [
@@ -142,7 +142,7 @@ function dynamicChoiceSetFromQuery(s: string): [displayField: string, filterLogi
         /*valueField*/limit];
 }
 
-function dynamicChoiceSetToQuery(s: DynamicChoiceSet): string {
+function dynamicChoiceSetToQuery(v: number, s: DynamicChoiceSet): string {
     return genericToQuery('DYNAMIC', 'SET',
         /*query*/s.displayField,
         /*action*/s.outputAssignments.length > 0 ? s.outputAssignments.map(x => outputAssignmentToString(x)).join(', ') : undefined,
@@ -160,7 +160,7 @@ export interface Constant extends Resource {
     value: Value;
 }
 
-export function constantParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): void {
+export function constantParse(debug: Debug, v: number, f: Flow, s: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
     const [, dataType] = valueFromTypeNode(s.type)
     const prop = objectPurge({
@@ -175,7 +175,7 @@ export function constantParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration):
 }
 
 /* eslint-disable complexity */
-export function constantBuild(debug: Debug, s: Constant): ts.ClassElement {
+export function constantBuild(debug: Debug, v: number, s: Constant): ts.ClassElement {
     const prop = sf.createPropertyDeclaration(
         /*decorators*/undefined,
         /*modifiers*/[sf.createToken(sk.ConstKeyword)],
@@ -197,7 +197,7 @@ export interface Formula extends Resource {
     scale?: number;
 }
 
-export function formulaParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): void {
+export function formulaParse(debug: Debug, v: number, f: Flow, s: ts.MethodDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
     const rtnStmt = s.body.statements.find(x => x.kind === sk.ReturnStatement) as ts.ReturnStatement;
     if (!rtnStmt || rtnStmt.kind !== sk.ReturnStatement) throw Error('formulaParse: no statement found');
@@ -221,7 +221,7 @@ export function formulaParse(debug: Debug, f: Flow, s: ts.MethodDeclaration): vo
 }
 
 /* eslint-disable complexity */
-export function formulaBuild(debug: Debug, s: Formula): ts.ClassElement {
+export function formulaBuild(debug: Debug, v: number, s: Formula): ts.ClassElement {
     const method = sf.createPropertyAccessExpression(sf.createToken(sk.ThisKeyword), sf.createIdentifier('formula'));
     const lambda = sf.createReturnStatement(sf.createCallExpression(method, undefined, [createStringLiteralX(s.expression)]));
     const prop = sf.createMethodDeclaration(
@@ -248,7 +248,7 @@ export interface Stage extends Resource {
     stageOrder: number;
 }
 
-export function stageParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): void {
+export function stageParse(debug: Debug, v: number, f: Flow, s: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
     const func = s.initializer as ts.NewExpression;
     if (!func && func.kind !== sk.NewExpression) throw Error('stageParse: no statement found');
@@ -268,7 +268,7 @@ export function stageParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): vo
 }
 
 /* eslint-disable complexity */
-export function stageBuild(debug: Debug, s: Stage): ts.ClassElement {
+export function stageBuild(debug: Debug, v: number, s: Stage): ts.ClassElement {
     const args: ts.Expression[] = [sf.createNumericLiteral(s.stageOrder), createStringLiteralX(s.label)];
     if (!s.isActive) args.push(sf.createToken(sk.FalseKeyword));
     const prop = sf.createPropertyDeclaration(
@@ -291,7 +291,7 @@ export interface TextTemplate extends Resource {
     text: string;
 }
 
-export function textTemplateParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration): void {
+export function textTemplateParse(debug: Debug, v: number, f: Flow, s: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(s);
     const func = s.initializer as ts.NewExpression;
     if (!func && func.kind !== sk.NewExpression) throw Error('textTemplateParse: no statement found');
@@ -310,7 +310,7 @@ export function textTemplateParse(debug: Debug, f: Flow, s: ts.PropertyDeclarati
 }
 
 /* eslint-disable complexity */
-export function textTemplateBuild(debug: Debug, s: TextTemplate): ts.ClassElement {
+export function textTemplateBuild(debug: Debug, v: number, s: TextTemplate): ts.ClassElement {
     const args: ts.Expression[] = [createStringLiteralX(s.text)];
     if (s.isViewedAsPlainText === 'true') args.push(sf.createToken(sk.TrueKeyword));
     const prop = sf.createPropertyDeclaration(
@@ -339,7 +339,7 @@ export interface Variable extends Resource {
     value?: Value;
 }
 
-export function variableParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration, p: ts.PropertyDeclaration): void {
+export function variableParse(debug: Debug, v: number, f: Flow, s: ts.PropertyDeclaration, p: ts.PropertyDeclaration): void {
     const [description, processMetadataValues] = parseDescription(p ?? s);
     const decorators = p?.decorators ?? s?.decorators;
     const decoratorName = decorators?.length > 0 ? decorators[0].getText() : '';
@@ -362,7 +362,7 @@ export function variableParse(debug: Debug, f: Flow, s: ts.PropertyDeclaration, 
 }
 
 /* eslint-disable complexity */
-export function variableBuild(debug: Debug, s: Variable): ts.ClassElement {
+export function variableBuild(debug: Debug, v: number, s: Variable): ts.ClassElement {
     const decorators: ts.Decorator[] = s.isInput || s.isOutput
         ? [sf.createDecorator(sf.createIdentifier(`${(s.isInput ? 'In' : '')}${(s.isOutput ? 'Out' : '')}`))]
         : undefined;

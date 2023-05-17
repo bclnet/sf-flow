@@ -168,6 +168,7 @@ export function flowSort(f: Flow): void {
 }
 
 export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
+    let v = 0;
     let prevProp: ts.PropertyDeclaration;
     s.forEachChild(s1 => {
         if (s1.kind === sk.ClassDeclaration) {
@@ -197,7 +198,7 @@ export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
                             : (expr.right as ts.StringLiteral).text;
                         const argIdent = `${ident.escapedText as string}:${argName}`;
                         switch (argIdent) {
-                            case 'flow:': f.apiVersion = argValue; break;
+                            case 'flow:': f.apiVersion = argValue; v = Number(argValue); break;
                             case 'flow:runInMode': f.runInMode = argValue as FlowRunInMode; break;
                             case 'flow:status': f.status = argValue; break;
                             case 'flow:environments': f.environments = argValue; break;
@@ -219,23 +220,23 @@ export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
                         break;
                     }
                     const typeName = prop.type.getText();
-                    if (prop.modifiers?.find(x => x.kind === sk.ConstKeyword)) constantParse(debug, f, prop)
-                    else if (typeName.startsWith('Choice')) choiceParse(debug, f, prop);
-                    else if (typeName.startsWith('DynamicChoice')) dynamicChoiceSetParse(debug, f, prop);
-                    else if (typeName === 'TextTemplate') textTemplateParse(debug, f, prop);
-                    else if (typeName === 'Stage') stageParse(debug, f, prop);
-                    else variableParse(debug, f, prop, prevProp);
+                    if (prop.modifiers?.find(x => x.kind === sk.ConstKeyword)) constantParse(debug, v, f, prop)
+                    else if (typeName.startsWith('Choice')) choiceParse(debug, v, f, prop);
+                    else if (typeName.startsWith('DynamicChoice')) dynamicChoiceSetParse(debug, v, f, prop);
+                    else if (typeName === 'TextTemplate') textTemplateParse(debug, v, f, prop);
+                    else if (typeName === 'Stage') stageParse(debug, v, f, prop);
+                    else variableParse(debug, v, f, prop, prevProp);
                     prevProp = undefined;
                     break;
                 }
                 case sk.GetAccessor: {
                     const prop = c1 as ts.MethodDeclaration;
-                    formulaParse(debug, f, prop);
+                    formulaParse(debug, v, f, prop);
                     break;
                 }
                 case sk.MethodDeclaration: {
                     const method = c1 as ts.MethodDeclaration;
-                    startParse(debug, f, method);
+                    startParse(debug, v, f, method);
                     break;
                 }
                 // eslint-disable-next-line no-console
@@ -243,13 +244,14 @@ export function flowParse(debug: Debug, f: Flow, s: ts.Node): void {
             }
         });
     });
+    if (f.recordRollbacks?.connector) delete f.recordRollbacks?.connector.processMetadataValues;
     // console.log(flow);
 }
 
-export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connector: [Connectable, string]): void {
+export function flowParseBlock(debug: Debug, v: number, flow: Flow, s: ts.Node, connector: [Connectable, boolean, string]): void {
     if (!s) return;
     debug?.push();
-    let nextConnector: [Connectable, string];
+    let nextConnector: [Connectable, boolean, string];
     // eslint-disable-next-line complexity
     s.forEachChild(c1 => {
         // debug?.log('parse', sk[c1.kind]);
@@ -266,29 +268,29 @@ export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connector: 
                 const funcName = (func.expression as ts.PropertyAccessExpression).name.escapedText as string;
                 const arg0text = args.length > 0 ? (args[0] as ts.StringLiteral).text : undefined;
                 debug?.log('parse', funcName, arg0text ? arg0text.substring(0, 6) : '');
-                if (funcName === 'query' && arg0text.startsWith('ACTION')) nextConnector = actionCallParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('APEX')) nextConnector = apexPluginCallParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('INSERT')) nextConnector = recordCreateParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('DELETE')) nextConnector = recordDeleteParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('SELECT')) nextConnector = recordLookupParse(debug, flow, stmt, func);
-                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) nextConnector = recordUpdateParse(debug, flow, stmt, func);
-                else if (funcName === 'set') nextConnector = assignmentParse(debug, flow, stmt, func);
-                else if (funcName === 'screen') nextConnector = screenParse(debug, flow, stmt, func);
-                else if (funcName === 'subflow') nextConnector = subflowParse(debug, flow, stmt, func);
-                else if (funcName === 'rollback') nextConnector = recordRollbackParse(debug, flow, stmt, func);
+                if (funcName === 'query' && arg0text.startsWith('ACTION')) nextConnector = actionCallParse(debug, v, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('APEX')) nextConnector = apexPluginCallParse(debug, v, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('INSERT')) nextConnector = recordCreateParse(debug, v, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('DELETE')) nextConnector = recordDeleteParse(debug, v, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('SELECT')) nextConnector = recordLookupParse(debug, v, flow, stmt, func);
+                else if (funcName === 'query' && arg0text.startsWith('UPDATE')) nextConnector = recordUpdateParse(debug, v, flow, stmt, func);
+                else if (funcName === 'set') nextConnector = assignmentParse(debug, v, flow, stmt, func);
+                else if (funcName === 'screen') nextConnector = screenParse(debug, v, flow, stmt, func);
+                else if (funcName === 'subflow') nextConnector = subflowParse(debug, v, flow, stmt, func);
+                else if (funcName === 'rollback') nextConnector = recordRollbackParse(debug, v, flow, stmt, func);
                 else throw Error(`Unknown func '${funcName} ${arg0text}'`);
                 break;
             }
             case sk.IfStatement: {
                 const stmt = c1 as ts.IfStatement;
                 debug?.log('parse', 'decisionParse');
-                nextConnector = decisionParse(debug, flow, stmt);
+                nextConnector = decisionParse(debug, v, flow, stmt);
                 break;
             }
             case sk.ForInStatement: {
                 const stmt = c1 as ts.ForInStatement;
                 debug?.log('parse', 'loopParse');
-                nextConnector = loopParse(debug, flow, stmt);
+                nextConnector = loopParse(debug, v, flow, stmt);
                 break;
             }
             case sk.ContinueStatement:
@@ -303,10 +305,10 @@ export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connector: 
         }
         // assign block
         if (connector && nextConnector) {
-            const [obj, field] = connector;
+            const [obj, isGoTo, field] = connector;
             const targetReference = nextConnector[0].name;
             debug?.log('assgn', `${obj.name}.${field} = '${targetReference}'`);
-            obj[field] = connectorCreate(targetReference);
+            obj[field] = connectorCreate(targetReference, isGoTo);
         }
         connector = nextConnector;
         nextConnector = undefined;
@@ -318,6 +320,7 @@ export function flowParseBlock(debug: Debug, flow: Flow, s: ts.Node, connector: 
 export function flowBuild(debug: Debug, s: Flow): ts.Node {
     const resources: Resource[] = []; const elements = {};
     const decorators: ts.Decorator[] = []; const members: ts.ClassElement[] = [];
+    const v = Number(s.apiVersion);
 
     // binding
     for (const t of [
@@ -369,7 +372,7 @@ export function flowBuild(debug: Debug, s: Flow): ts.Node {
 
     // #resources
     resources.forEach(x => {
-        members.push(x.build(debug, x));
+        members.push(x.build(debug, v, x));
     });
 
     // #methods
@@ -380,8 +383,8 @@ export function flowBuild(debug: Debug, s: Flow): ts.Node {
     } as Connector : s.start?.connector;
     let processType = s.processType;
     do {
-        const block = ctx.buildBlock(debug, connector) ?? sf.createBlock([]);
-        members.push(s.start.build(debug, s, s.start, processType, block));
+        const block = ctx.buildBlock(debug, v, connector) ?? sf.createBlock([]);
+        members.push(s.start.build(debug, v, s, s.start, processType, block));
         connector = ctx.moveNext();
         ctx.stmts.length = 0;
         processType = FlowProcessType.Orphan;

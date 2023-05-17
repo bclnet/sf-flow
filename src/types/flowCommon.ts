@@ -137,22 +137,21 @@ export class Context {
         this.visted = {};
     }
 
-    public static parseTargetStatement(s: ts.Statement): [obj: Connectable, field: string] {
-        return [{ name: (s as ts.BreakStatement).label.text }, undefined];
+    public static parseTargetStatement(s: ts.Statement): [obj: Connectable, isGoto: boolean, field: string] {
+        return s.kind === sk.BreakStatement
+            ? [{ name: (s as ts.BreakStatement).label.text }, false, undefined]
+            : [{ name: (s as ts.ContinueStatement).label.text }, true, undefined];
     }
 
     public static buildTargetStatement(s: Connector): ts.Statement {
-        return sf.createBreakStatement(s.targetReference); //s.isGoTo ? sf.createContinueStatement(s.targetReference)
+        return s.isGoTo ? sf.createContinueStatement(s.targetReference) : sf.createBreakStatement(s.targetReference);
     }
 
     public static parseTargetFaultArgument(s: ts.Expression): Connector {
         const stmt = s as ts.ArrowFunction;
         if (stmt.kind !== sk.ArrowFunction && stmt.body.kind !== sk.Block) throw Error('parseTargetFaultArgument: invalid arrow function');
-        const [connect,] = Context.parseTargetStatement((stmt.body as ts.Block).statements[0]);
-        return {
-            targetReference: connect.name,
-            processMetadataValues: [],
-        };
+        const [connect, isGoTo] = Context.parseTargetStatement((stmt.body as ts.Block).statements[0]);
+        return connectorCreate(connect.name, isGoTo);
     }
 
     public static buildTargetFaultArgument(s: Connector): ts.Expression {
@@ -163,24 +162,22 @@ export class Context {
         this.counted = {};
         const refs = Object.keys(this.remain).sort((l, r) => this.countReference(l) - this.countReference(r));
         if (refs.length === 0) return undefined;
-        return {
-            targetReference: refs[0],
-            processMetadataValues: []
-        };
+        return connectorCreate(refs[0], false);
     }
 
     public hasRemain(s: Connector): boolean { return s.targetReference in this.remain; }
 
     public count(s: Connector): number {
+        const v = 0;
         this.counting = true;
         if (!s) return 0;
         else if (!this.hasRemain(s)) return 1;
         const ref = this.remain[s.targetReference] as Element;
         if (!ref) throw Error(`count: unknown targetReference '${s.targetReference}`);
-        return 1 + (ref.build(undefined, ref, this) as number);
+        return 1 + (ref.build(undefined, v, ref, this) as number);
     }
 
-    public build(debug: Debug, s: Connector): ts.ClassElement {
+    public build(debug: Debug, v: number, s: Connector): ts.ClassElement {
         this.counting = false;
         if (!s) return;
         else if (!this.hasRemain(s)) { this.stmts.push(Context.buildTargetStatement(s)); return; }
@@ -189,17 +186,17 @@ export class Context {
         debug?.log('build', ref.build.name.substring(0, ref.build.name.length - 5), ref.name);
         this.visted[s.targetReference] = ref;
         delete this.remain[s.targetReference];
-        ref.build(debug, ref, this);
+        ref.build(debug, v, ref, this);
         return undefined;
     }
 
-    public buildBlock(debug: Debug, s: Connector): ts.Statement {
+    public buildBlock(debug: Debug, v: number, s: Connector): ts.Statement {
         if (!s) return;
         else if (!this.hasRemain(s)) { return sf.createBlock([Context.buildTargetStatement(s)], false); }
         const lastStmts = this.stmts;
         this.stmts = [];
         debug?.push();
-        this.build(debug, s);
+        this.build(debug, v, s);
         debug?.pop();
         const block = sf.createBlock(this.stmts, true);
         this.stmts = lastStmts;
@@ -224,14 +221,14 @@ export interface Connectable {
 }
 
 export interface Connector {
-    isGoTo?: boolean;
+    isGoTo?: string;
     targetReference: string;
     processMetadataValues: ProcessMetadataValue[];
 }
 
 export function connectorCreate(targetReference: string, isGoTo?: boolean): Connector {
     return {
-        isGoTo,
+        isGoTo: isGoTo === true ? 'true' : undefined,
         targetReference,
         processMetadataValues: [],
     };

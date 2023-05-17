@@ -28,6 +28,12 @@ specify if you want to hide spinner.
 # flags.debug.summary
 specify if you want debug information.
 
+# flags.paranoid.summary
+specify if you want paranoid flag.
+
+# flags.force.summary
+specify if you want force a paranoid build.
+
 # error.paramNotFound
 Flow API name is missing.
 
@@ -36,6 +42,9 @@ The flow is not found in the org.
 
 # error.unsupportedFlow
 The flow is unsupported.
+
+# error.paranoidFlow
+The flow is paranoid.
 
 # examples
 - Say hello to the world:
