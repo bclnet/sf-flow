@@ -1,4 +1,3 @@
-
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages, AuthInfo, Connection } from '@salesforce/core';
 import * as fs from 'fs-extra';
@@ -38,7 +37,7 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
         username: Flags.string({ summary: messages.getMessage('flags.username.summary'), char: 'u' }),
         path: Flags.string({ summary: messages.getMessage('flags.path.summary'), char: 'p' }),
         apiversion: Flags.string({ summary: messages.getMessage('flags.apiversion.summary'), default: '56.0' }),
-        indir: Flags.string({ summary: messages.getMessage('flags.indir.summary'), char: 'i', default: './files.json' }),
+        indir: Flags.string({ summary: messages.getMessage('flags.indir.summary'), char: 'i' }), // , default: './files.json' }),
         outdir: Flags.string({ summary: messages.getMessage('flags.outdir.summary'), char: 'o' }),
         nospinner: Flags.boolean({ summary: messages.getMessage('flags.nospinner.summary') }),
         debug: Flags.boolean({ summary: messages.getMessage('flags.debug.summary'), char: 'd' }),
@@ -59,19 +58,21 @@ export default class FlowTsRetrieve extends SfCommand<FlowTsRetrieveResult> {
             const sourcePath = `${flags.path}.json`;
             const indir = flags.indir ? flags.indir : '.';
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-            flow = JSON.parse(fs.readFileSync(`${indir}/${sourcePath}`, { encoding: 'utf8', flag: 'r' }) as string) as Flow;
+            flow = JSON.parse(
+                fs.readFileSync(`${indir}/${sourcePath}`, { encoding: 'utf8', flag: 'r' }) as string
+            ) as Flow;
         } else {
             const authInfo = await AuthInfo.create({ username: flags.username });
             const conn = await Connection.create({ authInfo });
             conn.setApiVersion(flags.apiversion);
-            flow = await conn.metadata.read('Flow', flags.path) as unknown as Flow;
+            flow = (await conn.metadata.read('Flow', flags.path)) as unknown as Flow;
         }
 
         if (!flow.fullName) {
             this.spinner.stop('failed.');
             throw messages.createError('error.flowNotFound');
         }
-        const fb = new FlowTsBuilder((flow as unknown) as Flow);
+        const fb = new FlowTsBuilder(flow as unknown as Flow);
         if (!fb.isSupported()) {
             this.spinner.stop('failed.');
             throw messages.createError('error.unsupportedFlow');

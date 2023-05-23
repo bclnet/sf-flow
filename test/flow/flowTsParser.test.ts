@@ -1,12 +1,13 @@
 import { expect } from '@oclif/test';
-import FlowParser from '../../src/flow/flowTsParser';
 import * as fs from 'fs-extra';
+import FlowParser from '../../src/flow/flowTsParser';
 
 describe('flow/flowTsParser', () => {
-    let flowTsParser;
+    const path = 'Approve_Order_Summary.ts';
+    let flowTsParser: FlowParser;
 
-    beforeAll(() => {
-        const path = 'Approve_Order_Summary.ts';
+    before(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         const data = fs.readFileSync(`../../files.ts/${path}`, { encoding: 'utf8', flag: 'r' }) as string;
         flowTsParser = new FlowParser(data, 'test_flow');
     });
@@ -16,7 +17,7 @@ describe('flow/flowTsParser', () => {
     });
 
     it('to flow', () => {
-        const flow = flowTsParser.toFlow();
-        expect(flow.name).to.equal('');
+        const flow = flowTsParser.toFlow(undefined);
+        expect(flow.fullName).to.equal('');
     });
 });
