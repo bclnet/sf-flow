@@ -1,6 +1,4 @@
 {
-  "flow_ts_retrieve_text": "SFDX: Retrieve Flow.ts from Org",
-  "flow_ts_deploy_text": "SFDX: Deploy Flow.ts to Org",
-  "flow_json_retrieve_text": "SFDX: Retrieve Flow.json from Org",
-  "flow_json_deploy_text": "SFDX: Deploy Flow.json to Org"
+  "flow_ts_deploy_text": "SFDX: Deploy Source (.ts) to Org",
+  "flow_ts_retrieve_text": "SFDX: Retrieve Source (.ts) from Org"
 }
